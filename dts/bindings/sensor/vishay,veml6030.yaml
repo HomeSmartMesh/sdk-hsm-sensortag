@@ -1,0 +1,15 @@
+# Copyright (c) 2019, Linaro Limited
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+    High Accuracy Ambient Light Sensor With I2C Interface.
+    See datasheet at https://www.vishay.com/docs/84366/veml6030.pdf
+
+compatible: "vishay,veml6030"
+
+include: i2c-device.yaml
+
+properties:
+    int-gpios:
+      type: phandle-array
+      required: false

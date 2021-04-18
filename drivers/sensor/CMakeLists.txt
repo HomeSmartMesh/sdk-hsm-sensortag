@@ -1,0 +1,2 @@
+
+add_subdirectory_ifdef(CONFIG_VEML6030 veml6030)
