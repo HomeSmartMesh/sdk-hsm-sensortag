@@ -12,9 +12,7 @@
 #include <sys/__assert.h>
 #include <logging/log.h>
 
-#include "veml6030.h"
-
-#error zephyr not compiled
+#include <sensor/veml6030.h>
 
 LOG_MODULE_REGISTER(VEML6030, CONFIG_SENSOR_LOG_LEVEL);
 

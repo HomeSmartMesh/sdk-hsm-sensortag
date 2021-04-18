@@ -1,0 +1,22 @@
+config HSM_SAMPLES_DEFAULTS
+	bool "Enable HSM sample default settings"
+	default n
+	imply LOG
+	imply LOG_MINIMAL
+	imply ASSERT
+	imply ASSERT_NO_COND_INFO
+	imply ASSERT_NO_MSG_INFO
+	imply HW_STACK_PROTECTION if ARCH_HAS_STACK_PROTECTION
+	help
+	  Use the default configuration for HSM samples.
+
+if LOG
+
+# LOG_DEFAULT_LEVEL is declared in Zephyr,
+# we declare it here for a second time, to set a different default.
+# Omit the `prompt` to prevent it from appearing twice in two diffent places.
+
+config LOG_DEFAULT_LEVEL
+	default 1 if HSM_SAMPLES_DEFAULTS
+
+endif # LOG
