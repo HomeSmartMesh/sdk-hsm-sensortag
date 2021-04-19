@@ -75,10 +75,13 @@ static int veml6030_attr_set(const struct device *dev,
 			     const struct sensor_value *val)
 {
 	struct veml6030_data *drv_data = dev->data;
-	uint8_t value;
-	uint32_t cr;
 
-	return -ENOTSUP;
+	if (veml6030_reg_update(drv_data, VEML6030_REG_ALS_CONF, VEML6030_ALS_CONF_ALS_SD, VEML6030_ALS_CONF_ALS_SD_ON))
+	{
+		return -EIO;
+	}
+
+	return 0;
 }
 
 static int veml6030_sample_fetch(const struct device *dev,
@@ -133,6 +136,11 @@ int veml6030_init(const struct device *dev)
 			    DT_INST_BUS_LABEL(0));
 		return -EINVAL;
 	}
+
+	//if (veml6030_reg_update(drv_data, VEML6030_REG_ALS_CONF, VEML6030_ALS_CONF_ALS_SD, VEML6030_ALS_CONF_ALS_SD_ON))
+	//{
+	//	return -EIO;
+	//}
 
 	return 0;
 }

@@ -4,13 +4,14 @@
 #include <devicetree.h>
 #include <logging/log.h>
 #include <drivers/sensor.h>
+#include <sensor/veml6030.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 static const struct device *get_veml6030_device(void)
 {
-	//const struct device *dev = DEVICE_DT_GET_ANY(bosch_bme280);
-	const struct device *dev = device_get_binding("VEML6030");
+	const struct device *dev = device_get_binding(DT_LABEL(DT_INST(0, vishay_veml6030)));
+	//const struct device *dev = device_get_binding("VEML6030");
 
 	if (dev == NULL) {
 		/* No such node, or the node does not have status "okay". */
@@ -38,6 +39,8 @@ void read_device(const struct device *dev)
 		return;
 	}
 
+	k_sleep(K_MSEC(100));//wait the integration time
+
 	if (sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &val) != 0) {
 		LOG_ERR("sensor: channel get fail.\n");
 		return;
@@ -61,9 +64,15 @@ void main(void)
 		return;
 	}
 
+	if(sensor_attr_set(dev,SENSOR_CHAN_LIGHT,0,0))
+	{
+		LOG_ERR("sensor_attr_set() fail");
+		return;
+	}
+
 	while (1) {
 		read_device(dev);
 		LOG_INF("loop");
-		k_sleep(K_MSEC(4000));
+		k_sleep(K_MSEC(10000));
 	}
 }
