@@ -64,15 +64,11 @@ void main(void)
 		return;
 	}
 
-	if(sensor_attr_set(dev,SENSOR_CHAN_LIGHT,0,0))
-	{
-		LOG_ERR("sensor_attr_set() fail");
-		return;
-	}
-
+	k_sleep(K_MSEC(1000));
+	read_device(dev);
+	LOG_INF("looping now");
 	while (1) {
-		read_device(dev);
-		LOG_INF("loop");
+		//LOG_INF("loop");
 		k_sleep(K_MSEC(10000));
 	}
 }

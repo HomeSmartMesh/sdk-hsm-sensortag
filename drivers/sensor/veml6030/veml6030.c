@@ -16,9 +16,7 @@
 
 LOG_MODULE_REGISTER(VEML6030, CONFIG_SENSOR_LOG_LEVEL);
 
-static int veml6030_reg_read(struct veml6030_data *drv_data, uint8_t reg,
-
-			     uint8_t *val, bool send_stop)
+static int veml6030_reg_read(struct veml6030_data *drv_data, uint8_t reg,uint8_t *val, bool send_stop)
 {
 	struct i2c_msg msgs[2] = {
 		{
@@ -44,22 +42,19 @@ static int veml6030_reg_read(struct veml6030_data *drv_data, uint8_t reg,
 	return 0;
 }
 
-static int veml6030_reg_write(struct veml6030_data *drv_data, uint8_t reg,
-			      uint8_t val)
+static int veml6030_reg_write(struct veml6030_data *drv_data, uint8_t reg,uint16_t val)
 {
-	uint8_t tx_buf[2] = {reg, val};
+	uint8_t tx_buf[3] = {reg, (uint8_t)(val&0xFF), (uint8_t)(val>>8)};
 
-	return i2c_write(drv_data->i2c, tx_buf, sizeof(tx_buf),
-			 VEML6030_I2C_ADDRESS);
+	return i2c_write(drv_data->i2c, tx_buf, sizeof(tx_buf), VEML6030_I2C_ADDRESS);
 }
 
-static int veml6030_reg_update(struct veml6030_data *drv_data, uint8_t reg,
-			       uint8_t mask, uint8_t val)
+static int veml6030_reg_update(struct veml6030_data *drv_data, uint8_t reg,uint8_t mask, uint8_t val)
 {
-	uint8_t old_val = 0U;
-	uint8_t new_val = 0U;
+	uint16_t old_val = 0U;
+	uint16_t new_val = 0U;
 
-	if (veml6030_reg_read(drv_data, reg, &old_val, true) != 0) {
+	if (veml6030_reg_read(drv_data, reg, (uint8_t*)&old_val, true) != 0) {
 		return -EIO;
 	}
 
@@ -84,8 +79,7 @@ static int veml6030_attr_set(const struct device *dev,
 	return 0;
 }
 
-static int veml6030_sample_fetch(const struct device *dev,
-				 enum sensor_channel chan)
+static int veml6030_sample_fetch(const struct device *dev,enum sensor_channel chan)
 {
 	struct veml6030_data *drv_data = dev->data;
 	uint8_t vals[2];
@@ -95,19 +89,20 @@ static int veml6030_sample_fetch(const struct device *dev,
 
 	drv_data->sample = 0U;
 
-	if (veml6030_reg_read(drv_data, VEML6030_REG_ALS, vals,false) != 0) {
+	if(i2c_burst_read(drv_data->i2c , VEML6030_I2C_ADDRESS, VEML6030_REG_ALS, vals, 2)){
 		return -EIO;
 	}
-	val = vals[0];
-	val = val * 256 + vals[1];
+	//if (veml6030_reg_read(drv_data, VEML6030_REG_ALS, vals,true) != 0) {
+	//	return -EIO;
+	//}
+	val = vals[1];
+	val = val * 256 + vals[0];
 	drv_data->sample = val;
 
 	return 0;
 }
 
-static int veml6030_channel_get(const struct device *dev,
-				enum sensor_channel chan,
-				struct sensor_value *val)
+static int veml6030_channel_get(const struct device *dev,enum sensor_channel chan,struct sensor_value *val)
 {
 	struct veml6030_data *drv_data = dev->data;
 
@@ -129,18 +124,28 @@ static const struct sensor_driver_api veml6030_driver_api = {
 int veml6030_init(const struct device *dev)
 {
 	struct veml6030_data *drv_data = dev->data;
-
+	LOG_INF("veml6030_init() power on");
 	drv_data->i2c = device_get_binding(DT_INST_BUS_LABEL(0));
 	if (drv_data->i2c == NULL) {
-		LOG_DBG("Failed to get pointer to %s device!",
-			    DT_INST_BUS_LABEL(0));
+		LOG_ERR("Failed to get pointer to %s device!",DT_INST_BUS_LABEL(0));
 		return -EINVAL;
 	}
-
-	//if (veml6030_reg_update(drv_data, VEML6030_REG_ALS_CONF, VEML6030_ALS_CONF_ALS_SD, VEML6030_ALS_CONF_ALS_SD_ON))
-	//{
-	//	return -EIO;
-	//}
+	uint8_t wdata[2];
+	uint8_t rdata[2];
+	wdata[0] = 1;
+	wdata[1] = 0;
+	int ret = i2c_burst_write(drv_data->i2c , VEML6030_I2C_ADDRESS, VEML6030_REG_ALS_CONF, wdata, 2);
+	if (ret) {
+		LOG_ERR("i2c_burst_write() failed");
+	} else {
+		LOG_INF("i2c_burst_write() success");
+		ret = i2c_burst_read(drv_data->i2c , VEML6030_I2C_ADDRESS, VEML6030_REG_ALS_CONF, rdata, 2);
+		if (ret) {
+			LOG_ERR("i2c_burst_read() failed");
+		} else {
+			LOG_INF("i2c_burst_read() success 0x%X:0x%X",rdata[1],rdata[0]);
+		}
+	}
 
 	return 0;
 }
