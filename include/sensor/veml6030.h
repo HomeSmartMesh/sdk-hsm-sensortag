@@ -52,4 +52,9 @@ struct veml6030_data {
 	uint16_t sample;
 };
 
+//----------------- additional specific API ---------------------
+
+int veml6030_power_on(const struct device *dev);
+int veml6030_power_off(const struct device *dev);
+
 #endif /* _SENSOR_VEML6030_ */
