@@ -53,22 +53,15 @@ void read_device(const struct device *dev)
 
 void main(void)
 {
-	LOG_INF("Hello from Sensor Tag I2C env");
-
-
 	LOG_INF("VEML6030 light sensor application\n");
-
 	const struct device *dev = get_veml6030_device();
 	if (!dev) {
 		LOG_ERR("sensor: device not found.\n");
 		return;
 	}
 
-	k_sleep(K_MSEC(1000));
-	read_device(dev);
-	LOG_INF("looping now");
 	while (1) {
-		//LOG_INF("loop");
-		k_sleep(K_MSEC(10000));
+		read_device(dev);
+		k_sleep(K_MSEC(5000));
 	}
 }
