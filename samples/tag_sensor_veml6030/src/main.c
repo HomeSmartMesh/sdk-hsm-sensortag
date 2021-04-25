@@ -5,6 +5,7 @@
 #include <logging/log.h>
 #include <drivers/sensor.h>
 #include <sensor/veml6030.h>
+#include <stdio.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -26,7 +27,6 @@ static const struct device *get_veml6030_device(void)
 		return NULL;
 	}
 
-	printk("Found device \"%s\", getting sensor data\n", dev->name);
 	return dev;
 }
 
@@ -61,13 +61,8 @@ void read_device(const struct device *dev)
 
 void read_auto(const struct device *dev)
 {
-	struct sensor_value val;
-	veml6030_auto_measure(dev);//unused return
-	if (sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &val) != 0) {
-		LOG_ERR("sensor: channel get fail.");
-		return;
-	}
-	LOG_INF("=====> sensor: ambient light reading: %d.%06d lux", val.val1,val.val2);
+	float light = veml6030_auto_measure(dev);//unused return
+	printf("=====> light %.3f lux\n", light);
 }
 
 void main(void)

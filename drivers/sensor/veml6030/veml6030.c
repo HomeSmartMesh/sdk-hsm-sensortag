@@ -5,6 +5,7 @@
 #include <drivers/sensor.h>
 #include <sys/__assert.h>
 #include <logging/log.h>
+#include <stdio.h>
 
 #include <sensor/veml6030.h>
 
@@ -59,17 +60,26 @@ float reg_to_lum_lux(uint16_t val, uint16_t it_ms, float gain)
 	float lum_lux = val;
 	lum_lux = lum_lux * resolution;
 	//LOG_DBG("val = %u ; result = %d mLux",val, (int)(lum_lux*1000));
+	//TODO non linear correction
+	//y = 6.0135E-13x4 - 9.3924E-09x3 + 8.1488E-05x2 + 1.0023E+00x
 	return lum_lux;
 }
 
-uint8_t get_optimal_mode(float lum_lux)
+uint8_t get_optimal_mode(uint16_t sample,float lum_lux)
 {
-	uint8_t index = 0;
-	while((lum_lux > modes_illum[index])&&(index<8))
-	{
-		index++;
+	//actually, on saturation, set the highest mode to avoid slow raming up
+	if(sample == 65536){
+		return 8;
 	}
-	return index;
+	else
+	{
+		uint8_t index = 0;
+		while((lum_lux > modes_illum[index])&&(index<8))
+		{
+			index++;
+		}
+		return index;
+	}
 }
 
 static int veml6030_reg_read(struct veml6030_data *drv_data, uint8_t reg,uint16_t *val)
@@ -135,7 +145,6 @@ static int veml6030_sample_fetch(const struct device *dev,enum sensor_channel ch
 		return -EIO;
 	}
 	drv_data->sample = val;
-	LOG_DBG("Fetched val = %u",drv_data->sample);
 	return 0;
 }
 
@@ -167,6 +176,12 @@ static int veml6030_power_update(struct veml6030_data *drv_data, uint16_t val)
 	if (veml6030_reg_read(drv_data, VEML6030_REG_ALS_CONF, &old_config) != 0) {
 		return -EIO;
 	}
+	//update params needed in every config update - here in power with existing config from sensors only
+	uint16_t integration_bits = old_config & VEML6030_ALS_CONF_ALS_IT_MASK;
+	uint16_t gain_bits = old_config & VEML6030_ALS_CONF_ALS_GAIN_MASK;
+	drv_data->config_it_gain = integration_bits | gain_bits;
+	drv_data->integration_ms = lut_integration_ms[integration_bits>>6];
+	drv_data->gain = lut_gain[gain_bits>>11];
 
 	new_config = old_config & ~VEML6030_ALS_CONF_ALS_SD_MASK;
 	new_config |= val & VEML6030_ALS_CONF_ALS_SD_MASK;
@@ -178,8 +193,10 @@ static int veml6030_it_gain_update(struct veml6030_data *drv_data, uint16_t val)
 {
 	uint16_t old_config = 0U;
 	uint16_t new_config = 0U;
+	int ret = 0;
 
 	if (veml6030_reg_read(drv_data, VEML6030_REG_ALS_CONF, &old_config) != 0) {
+		LOG_ERR("veml6030_reg_read() failed");
 		return -EIO;
 	}
 	uint16_t mask = (VEML6030_ALS_CONF_ALS_IT_MASK | VEML6030_ALS_CONF_ALS_GAIN_MASK);
@@ -191,9 +208,12 @@ static int veml6030_it_gain_update(struct veml6030_data *drv_data, uint16_t val)
 	drv_data->config_it_gain = integration_bits | gain_bits;
 	drv_data->integration_ms = lut_integration_ms[integration_bits>>6];
 	drv_data->gain = lut_gain[gain_bits>>11];
-	LOG_DBG("inetgration time = %d ms ; gain_bits = 0x%X",drv_data->integration_ms,(gain_bits>>11));
 
-	return veml6030_reg_write(drv_data, VEML6030_REG_ALS_CONF, new_config);
+	ret =  veml6030_reg_write(drv_data, VEML6030_REG_ALS_CONF, new_config);
+	if(ret){
+		LOG_ERR("veml6030_reg_write() failed");
+	}
+	return ret;
 }
 
 int veml6030_power_on(const struct device *dev)
@@ -202,8 +222,6 @@ int veml6030_power_on(const struct device *dev)
 	int ret = veml6030_power_update(drv_data,VEML6030_ALS_CONF_ALS_SD_ON);
 	if (ret) {
 		LOG_ERR("veml6030_power_update() failed");
-	} else {
-		LOG_INF("veml6030_power_update(power on)");
 	}
 	return ret;
 }
@@ -214,8 +232,6 @@ int veml6030_power_off(const struct device *dev)
 	int ret = veml6030_power_update(drv_data,VEML6030_ALS_CONF_ALS_SD_OFF);
 	if (ret) {
 		LOG_ERR("veml6030_power_update() failed");
-	} else {
-		LOG_INF("veml6030_power_update(power off)");
 	}
 	return ret;
 }
@@ -261,27 +277,20 @@ float veml6030_auto_measure(const struct device *dev)
 	bool optimal_measure = false;// no measure yet
 	while(!optimal_measure)
 	{
-		LOG_DBG("----- ksleeping %u ms ------",2*drv_data->integration_ms+5);
 		k_sleep(K_MSEC(2*drv_data->integration_ms+5));//wait the integration time +5 ms clock drift safety : x2 as x1 fail with reading 0
 		measure_lux = veml6030_fetch_lux(dev);
-		uint32_t Lux_val = measure_lux;
-		LOG_DBG("reg = %u ; measure = %u Lux",drv_data->sample, Lux_val);
-
-		uint8_t optimal_mode = get_optimal_mode(measure_lux);
-		LOG_DBG("optimal_mode = %u",optimal_mode);
+		uint8_t optimal_mode = get_optimal_mode(drv_data->sample,measure_lux);
 		if(modes_flags[optimal_mode] == drv_data->config_it_gain)//optimal mode already selected
 		{
 			optimal_measure = true;
 		}
 		else
 		{
+			printf("auto_measure>sample %d not optimal ; gain = %.3f ; it = %d ms\n",
+					drv_data->sample, drv_data->gain, drv_data->integration_ms);
 			//update both integration and gain to the new optimal value
-			int ret = veml6030_it_gain_update(drv_data,modes_flags[optimal_mode]);
-			if (ret) {
-				LOG_ERR("veml6030_it_gain_update() failed");
-			} else {
-				LOG_INF("veml6030_it_gain_update(0x%04X)",modes_flags[optimal_mode]);
-			}
+			veml6030_it_gain_update(drv_data,modes_flags[optimal_mode]);
+			printf("auto_measure>new params => gain = %f ; it = %d\n",drv_data->gain,drv_data->integration_ms);
 			optimal_measure = false;
 		}
 	}
