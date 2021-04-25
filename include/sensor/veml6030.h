@@ -49,12 +49,17 @@
 
 struct veml6030_data {
 	const struct device *i2c;
-	uint16_t sample;
+	uint16_t 	sample;
+	float		lum_lux;
+	uint16_t 	config_it_gain;
+	uint16_t	integration_ms;
+	float		gain;
 };
 
 //----------------- additional specific API ---------------------
 
 int veml6030_power_on(const struct device *dev);
 int veml6030_power_off(const struct device *dev);
+float veml6030_auto_measure(const struct device *dev);
 
 #endif /* _SENSOR_VEML6030_ */
