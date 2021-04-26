@@ -68,7 +68,7 @@ float reg_to_lum_lux(uint16_t val, uint16_t it_ms, float gain)
 uint8_t get_optimal_mode(uint16_t sample,float lum_lux)
 {
 	//actually, on saturation, set the highest mode to avoid slow raming up
-	if(sample == 65536){
+	if(sample == 65535){
 		return 8;
 	}
 	else
