@@ -1,0 +1,7 @@
+# MS8607 temperature, humidity and pressure configuration options
+
+config MS8607
+	bool "MS8607 temperature, humidity and pressure Sensor"
+	depends on I2C
+	help
+	  Enable driver for MS8607 temperature, humidity and pressure sensors.

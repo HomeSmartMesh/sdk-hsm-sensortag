@@ -58,11 +58,19 @@ float reg_to_lum_lux(uint16_t val, uint16_t it_ms, float gain)
 	//else LOG_DBG("gain = %d uGain",(int)(gain*1000));
 	//LOG_DBG("integration time = %d ; resolution = %d mRes",it_ms,res);
 	float lum_lux = val;
-	lum_lux = lum_lux * resolution;
-	//LOG_DBG("val = %u ; result = %d mLux",val, (int)(lum_lux*1000));
-	//TODO non linear correction
+	float x = lum_lux * resolution;
 	//y = 6.0135E-13x4 - 9.3924E-09x3 + 8.1488E-05x2 + 1.0023E+00x
-	return lum_lux;
+	//correction will always be applied to avoid edges
+	const float C0 = 1.0023;
+	const float C1 = 8.1488E-05;
+	const float C2 = -9.3924E-09;
+	const float C3 = 6.0135E-13;
+	float x_2 = x * x;
+	float x_3 = x_2 * x;
+	float x_4 = x_3 * x;
+	float y = x_4 * C3 + x_3 * C2 + x_2 * C1 + x * C0;
+	//printf("measure = %f ; corrected measure = %f",x,y);
+	return y;
 }
 
 uint8_t get_optimal_mode(uint16_t sample,float lum_lux)

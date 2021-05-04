@@ -1,2 +1,3 @@
 
 add_subdirectory_ifdef(CONFIG_VEML6030 veml6030)
+add_subdirectory_ifdef(CONFIG_MS8607 ms8607)

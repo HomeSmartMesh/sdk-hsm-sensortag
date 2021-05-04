@@ -6,5 +6,6 @@ menuconfig SENSOR
 if SENSOR
 
 rsource "veml6030/Kconfig"
+rsource "ms8607/Kconfig"
 
 endif # SENSOR

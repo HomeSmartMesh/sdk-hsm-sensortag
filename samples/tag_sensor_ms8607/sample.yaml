@@ -1,0 +1,8 @@
+sample:
+  name: MS8607 Sensor Sample
+tests:
+  samples.sensor.bh1749:
+    harness: sensor
+    tags: sensors
+    platform_allow: nrf52840_sensortag
+    depends_on: i2c

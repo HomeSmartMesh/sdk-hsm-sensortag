@@ -1,0 +1,10 @@
+# Copyright (c) 2019, Linaro Limited
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+    Temperature humidity and pressure Sensor With I2C Interface.
+    See datasheet at https://www.te.com/commerce/DocumentDelivery/DDEController?Action=showdoc&DocId=Data+Sheet%7FMS8607-02BA01%7FB3%7Fpdf%7FEnglish%7FENG_DS_MS8607-02BA01_B3.pdf%7FCAT-BLPS0018
+
+compatible: "teconnectivity,ms8607"
+
+include: i2c-device.yaml
