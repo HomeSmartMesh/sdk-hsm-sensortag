@@ -105,6 +105,11 @@
 	sda-gpios = <&gpio1 15 0>;
 	scl-gpios = <&gpio1 13 0>;
 
+	ms8607@40 /*hum@40,press@76*/{
+		compatible = "teconnectivity,ms8607";
+		reg = <0x40>;
+		label = "MS8607";
+	};
 	veml6030@48 {
 		compatible = "vishay,veml6030";
 		reg = <0x48>;

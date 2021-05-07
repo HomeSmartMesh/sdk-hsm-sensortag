@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
+#include <device.h>
 
 // Enums
 
@@ -60,7 +61,7 @@ enum ms8607_pressure_resolution {
 /**
  * \brief Configures the SERCOM I2C master to be used with the MS8607 device.
  */
-void ms8607_init(void);
+int ms8607_init(const struct device *dev);
 
 /**
  * \brief Check whether MS8607 device is connected

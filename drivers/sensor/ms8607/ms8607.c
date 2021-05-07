@@ -10,45 +10,25 @@
  *
  */
 
-#include "ms8607.h"
-
- /**
-  * The header "i2c.h" has to be implemented for your own platform to 
-  * conform the following protocol :
-  *
-  * enum i2c_transfer_direction {
-  * 	I2C_TRANSFER_WRITE = 0,
-  * 	I2C_TRANSFER_READ  = 1,
-  * };
-  * 
-  * enum status_code {
-  * 	STATUS_OK           = 0x00,
-  * 	STATUS_ERR_OVERFLOW	= 0x01,
-  *		STATUS_ERR_TIMEOUT  = 0x02,
-  * };
-  * 
-  * struct i2c_master_packet {
-  * 	// Address to slave device
-  * 	uint16_t address;
-  * 	// Length of data array
-  * 	uint16_t data_length;
-  * 	// Data array containing all data to be transferred
-  * 	uint8_t *data;
-  * };
-  * 
-  * void i2c_master_init(void);
-  * enum status_code i2c_master_read_packet_wait(struct i2c_master_packet *const packet);
-  * enum status_code i2c_master_write_packet_wait(struct i2c_master_packet *const packet);
-  * enum status_code i2c_master_write_packet_wait_no_stop(struct i2c_master_packet *const packet);
-  */
-#include "i2c.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+
+#define DT_DRV_COMPAT teconnectivity_ms8607
+
+#include <device.h>
+#include <drivers/i2c.h>
+#include <drivers/sensor.h>
+#include <sys/__assert.h>
+#include <logging/log.h>
+#include <stdio.h>
+#include <sensor/ms8607.h>
+
+#include "ms8607_i2c.h"
+
 // HSENSOR device address
-#define HSENSOR_ADDR										0x40 //0b1000000
+#define HSENSOR_ADDR										DT_INST_REG_ADDR(0)//0x40 //0b1000000
 
 // HSENSOR device commands
 #define HSENSOR_RESET_COMMAND								0xFE
@@ -187,14 +167,54 @@ enum ms8607_status psensor_read_pressure_and_temperature( float *, float *);
 /**
  * \brief Configures the SERCOM I2C master to be used with the ms8607 device.
  */
-void ms8607_init(void)
+int ms8607_init(const struct device *dev)
 {	
 	hsensor_i2c_master_mode = ms8607_i2c_no_hold;
 	psensor_resolution_osr = ms8607_pressure_resolution_osr_8192;
 	
+	//LOG_INF("ms8607_init()");
+	struct ms8607_data *drv_data;
+    drv_data = dev->data;
+	drv_data->i2c = device_get_binding(DT_INST_BUS_LABEL(0));
+	if (drv_data->i2c == NULL) {
+		//LOG_ERR("Failed to get pointer to %s device!",DT_INST_BUS_LABEL(0));
+	}
 	/* Initialize and enable device with config. */
-	i2c_master_init();
+	i2c_master_init(dev);
+
+	return 0;
 }
+
+
+static int ms8607_attr_set(	const struct device *dev,enum sensor_channel chan,
+			     				enum sensor_attribute attr,const struct sensor_value *val)
+{
+	return 0;
+}
+
+static int ms8607_sample_fetch(const struct device *dev,enum sensor_channel chan)
+{
+	return 0;
+}
+
+static int ms8607_channel_get(const struct device *dev,enum sensor_channel chan,struct sensor_value *val)
+{
+
+	return 0;
+}
+
+static const struct sensor_driver_api ms8607_driver_api = {
+	.attr_set = ms8607_attr_set,
+	.sample_fetch = ms8607_sample_fetch,
+	.channel_get = ms8607_channel_get,
+};
+static struct ms8607_data ms8607_drv_data;
+
+DEVICE_DT_INST_DEFINE(0, ms8607_init, device_pm_control_nop,
+	    &ms8607_drv_data, NULL, POST_KERNEL,
+	    CONFIG_SENSOR_INIT_PRIORITY, &ms8607_driver_api);
+
+
 
 /**
  * \brief Check whether MS8607 device is connected
@@ -915,18 +935,26 @@ enum ms8607_status psensor_read_eeprom_coeff(uint8_t command, uint16_t *coeff)
 	// Send the conversion command
 	status = psensor_write_command(command);
 	if(status != ms8607_status_ok)
+	{
 		return status;
+	}
 	
 	i2c_status = i2c_master_read_packet_wait(&read_transfer);
 	if( i2c_status == STATUS_ERR_OVERFLOW )
+	{
 		return ms8607_status_no_i2c_acknowledge;
+	}
 	if( i2c_status != STATUS_OK)
+	{
 		return ms8607_status_i2c_transfer_error;
+	}
 		
 	*coeff = (buffer[0] << 8) | buffer[1];
     
     if (*coeff == 0)
-        return ms8607_status_i2c_transfer_error;
+	{
+		return ms8607_status_i2c_transfer_error;
+	}
 	
 	return ms8607_status_ok;	
 }
@@ -1041,17 +1069,23 @@ enum ms8607_status psensor_read_pressure_and_temperature( float *temperature, fl
 	cmd |= PSENSOR_START_TEMPERATURE_ADC_CONVERSION;
 	status = psensor_conversion_and_read_adc( cmd, &adc_temperature);
 	if( status != ms8607_status_ok)
+	{
 		return status;
+	}
 
 	// Now read pressure
 	cmd = psensor_resolution_osr*2;
 	cmd |= PSENSOR_START_PRESSURE_ADC_CONVERSION;
 	status = psensor_conversion_and_read_adc( cmd, &adc_pressure);
 	if( status != ms8607_status_ok)
+	{
 		return status;
+	}
     
     if (adc_temperature == 0 || adc_pressure == 0)
-        return ms8607_status_i2c_transfer_error;
+    {
+		return ms8607_status_i2c_transfer_error;
+	}
 
 	// Difference between actual and reference temperature = D2 - Tref
 	dT = (int32_t)adc_temperature - ( (int32_t)eeprom_coeff[REFERENCE_TEMPERATURE_INDEX] <<8 );
