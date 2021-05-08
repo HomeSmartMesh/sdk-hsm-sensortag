@@ -6,4 +6,4 @@ west flash
 ```
 
 ## Documentation
-https://www.homesmartmesh.com/docs/microcontrollers/nrf52/thread_sensortag/#tag_sensor_ms8607
+https://www.homesmartmesh.com/docs/microcontrollers/nrf52/thread_sensortag/#tag_battery
