@@ -45,6 +45,7 @@ void delay_ms(uint32_t time)
 void i2c_master_init(const struct device *dev)
 {
     drv_data = dev->data;
+    LOG_INF("ms8607_init> i2c_master_init()");
 }
 
 enum status_code i2c_master_read_packet_wait(struct i2c_master_packet *const packet)
