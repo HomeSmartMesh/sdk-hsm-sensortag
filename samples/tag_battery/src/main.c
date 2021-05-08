@@ -16,8 +16,8 @@ void main(void)
 	while (1) {
 		battery_start();
 		k_sleep(K_MSEC(100));
-		uint16_t voltage = battery_get_mv();
-		LOG_INF("battery> Voltage = %u mV",voltage);
+		int32_t voltage = battery_get_mv();
+		LOG_INF("battery> Voltage = %d mV",voltage);
 		k_sleep(K_MSEC(4900));
 	}
 }

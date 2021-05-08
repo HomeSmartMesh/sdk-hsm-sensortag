@@ -14,7 +14,7 @@ void main(void)
 
 	
 	LOG_INF("MS8607 Temperature Humidity pressure sensor application");
-	const struct device *dev = device_get_binding(DT_LABEL(DT_NODELABEL(adc)));
+	const struct device *dev = device_get_binding(DT_LABEL(DT_INST(0, teconnectivity_ms8607)));
 	if (!dev) {
 		LOG_ERR("ms8607: device not found.");
 		return;
