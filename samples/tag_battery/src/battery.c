@@ -7,33 +7,26 @@
 
 LOG_MODULE_REGISTER(battery, LOG_LEVEL_INF);
 
-#define SENSOR_LOG_LEVEL_OFF      0
-#define SENSOR_LOG_LEVEL_ERROR    1
-#define SENSOR_LOG_LEVEL_WARNING  2
-#define SENSOR_LOG_LEVEL_INFO     3
-#define SENSOR_LOG_LEVEL_DEBUG    4
-
-#define ADC_NUM_CHANNELS	1
-#define ADC_CHANNEL	0
-
+#define ADC_CHANNEL				0
 #define ADC_RESOLUTION			12
-#define ADC_GAIN				ADC_GAIN_1
+#define ADC_GAIN				ADC_GAIN_1_6
 #define ADC_REFERENCE			ADC_REF_INTERNAL
-//#define ADC_ACQUISITION_TIME	ADC_ACQ_TIME_DEFAULT
 #define ADC_ACQUISITION_TIME	ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,40)
 
-
 const struct device *dev_adc;
-
 static int16_t sample;
 int32_t adc_vref;
 struct adc_channel_cfg channel_cfg = {
 	.gain = ADC_GAIN,
 	.reference = ADC_REFERENCE,
 	.acquisition_time = ADC_ACQUISITION_TIME,
-	/* channel ID will be overwritten below */
 	.channel_id = ADC_CHANNEL,
+	#ifdef CONFIG_ADC_CONFIGURABLE_INPUTS
+	.differential = 0,
+	.input_positive = SAADC_CH_PSELN_PSELN_VDD
+	#else
 	.differential = 0
+	#endif
 };
 
 struct adc_sequence sequence = {
@@ -51,9 +44,6 @@ void battery_init()
 		LOG_ERR("ADC device not found\n");
 		return;
 	}
-	#ifdef CONFIG_ADC_NRFX_SAADC
-		channel_cfg.input_positive = SAADC_CH_PSELN_PSELN_VDD;//SAADC_CH_PSELN_PSELN_VDD-SAADC_CH_PSELN_PSELN_VDDHDIV5
-	#endif
 
 	adc_channel_setup(dev_adc, &channel_cfg);
 	adc_vref = adc_ref_internal(dev_adc);
