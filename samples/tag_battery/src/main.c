@@ -3,7 +3,7 @@
 #include <logging/log.h>
 #include <stdio.h>
 
-#include "battery.h"
+#include <battery.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 

@@ -1,0 +1,5 @@
+config BATTERY
+	bool "BATTERY ADC VDD"
+	depends on ADC
+	help
+	  Enable driver for measuring Battery through ADC VDD Channel.
