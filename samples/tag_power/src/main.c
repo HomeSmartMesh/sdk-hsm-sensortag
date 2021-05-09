@@ -1,20 +1,20 @@
+//reference sample : zephyr\samples\boards\nrf\system_off 2.4.99
 
 #include <zephyr.h>
 #include <logging/log.h>
 #include <stdio.h>
-#include <battery.h>
 
 #include <device.h>
 #include <devicetree.h>
 #include <drivers/gpio.h>
 
+#include <power/power.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #define DEBUG_PIN 29
 #define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN, 1)
 #define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN, 0)
-
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -26,21 +26,36 @@ void gpio_pin_init()
 	}
 }
 
+
+static int disable_ds_1(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+	pm_constraint_set(PM_STATE_SOFT_OFF);
+	return 0;
+}
+
+SYS_INIT(disable_ds_1, PRE_KERNEL_2, 0);
+
 void main(void)
 {
 	gpio_pin_init();
 	debug_up();
-	battery_init();
-	debug_down();
 	LOG_INF("Hello Power management");
+	debug_down();
+	k_sleep(K_MSEC(100));
 
 	while (1) {
+		LOG_INF("start of while");
 		debug_up();
-		battery_start();
+		k_sleep(K_MSEC(1));
 		debug_down();
-		k_sleep(K_MSEC(1));//max acquisition time
-		int32_t voltage = battery_get_mv();
-		LOG_INF("battery> Voltage = %d mV",voltage);
-		k_sleep(K_MSEC(1999));
+		LOG_INF("loop");
+		k_sleep(K_MSEC(100));
+
+		pm_power_state_force((struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
+		LOG_INF("after pm");
+		k_sleep(K_MSEC(1));
+		LOG_INF("after pm k_sleep");
+		k_sleep(K_MSEC(999));
 	}
 }
