@@ -26,36 +26,38 @@ void gpio_pin_init()
 	}
 }
 
-
-static int disable_ds_1(const struct device *dev)
+void test_state(enum pm_state state)
 {
-	ARG_UNUSED(dev);
-	pm_constraint_set(PM_STATE_SOFT_OFF);
-	return 0;
+	pm_power_state_force((struct pm_state_info){state, 0, 0});//PM_STATE_SOFT_OFF
+	debug_up();
+	k_sleep(K_MSEC(10));
+	debug_down();
 }
 
-SYS_INIT(disable_ds_1, PRE_KERNEL_2, 0);
-
+//pm_constraint_set(PM_STATE_SOFT_OFF);
+//pm_constraint_release(PM_STATE_SOFT_OFF);
 void main(void)
 {
 	gpio_pin_init();
+
 	debug_up();
-	LOG_INF("Hello Power management");
+	k_sleep(K_MSEC(1));
 	debug_down();
-	k_sleep(K_MSEC(100));
+	LOG_INF("Hello Power management");
+
+	test_state(PM_STATE_RUNTIME_IDLE);
+	test_state(PM_STATE_RUNTIME_IDLE);
+	test_state(PM_STATE_SUSPEND_TO_IDLE);
+	test_state(PM_STATE_STANDBY);
+	test_state(PM_STATE_SUSPEND_TO_RAM);
+	test_state(PM_STATE_SUSPEND_TO_DISK);
+	test_state(PM_STATE_SOFT_OFF);
 
 	while (1) {
-		LOG_INF("start of while");
 		debug_up();
 		k_sleep(K_MSEC(1));
 		debug_down();
 		LOG_INF("loop");
-		k_sleep(K_MSEC(100));
-
-		pm_power_state_force((struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});
-		LOG_INF("after pm");
-		k_sleep(K_MSEC(1));
-		LOG_INF("after pm k_sleep");
 		k_sleep(K_MSEC(999));
 	}
 }
