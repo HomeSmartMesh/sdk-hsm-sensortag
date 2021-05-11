@@ -45,12 +45,12 @@ void main(void)
 	debug_down();
 	LOG_INF("Hello Power management");
 
-	test_state(PM_STATE_RUNTIME_IDLE);
-	test_state(PM_STATE_RUNTIME_IDLE);
-	test_state(PM_STATE_SUSPEND_TO_IDLE);
-	test_state(PM_STATE_STANDBY);
-	test_state(PM_STATE_SUSPEND_TO_RAM);
-	test_state(PM_STATE_SUSPEND_TO_DISK);
+	test_state(PM_STATE_ACTIVE);			//104 us
+	test_state(PM_STATE_RUNTIME_IDLE);		//110 us
+	test_state(PM_STATE_SUSPEND_TO_IDLE);	//110 us
+	test_state(PM_STATE_STANDBY);			//110 us
+	test_state(PM_STATE_SUSPEND_TO_RAM);	//110 us
+	test_state(PM_STATE_SUSPEND_TO_DISK);	//110 us
 	test_state(PM_STATE_SOFT_OFF);
 
 	while (1) {
