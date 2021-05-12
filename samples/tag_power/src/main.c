@@ -28,6 +28,7 @@ void gpio_pin_init()
 
 void test_state(enum pm_state state)
 {
+	LOG_INF("Power state %d",state);
 	pm_power_state_force((struct pm_state_info){state, 0, 0});//PM_STATE_SOFT_OFF
 	debug_up();
 	k_sleep(K_MSEC(10));
@@ -44,6 +45,7 @@ void main(void)
 	k_sleep(K_MSEC(1));
 	debug_down();
 	LOG_INF("Hello Power management");
+	k_sleep(K_MSEC(1000));
 
 	test_state(PM_STATE_ACTIVE);			//104 us
 	test_state(PM_STATE_RUNTIME_IDLE);		//110 us
@@ -52,6 +54,8 @@ void main(void)
 	test_state(PM_STATE_SUSPEND_TO_RAM);	//110 us
 	test_state(PM_STATE_SUSPEND_TO_DISK);	//110 us
 	test_state(PM_STATE_SOFT_OFF);
+
+	k_sleep(K_MSEC(1000));
 
 	while (1) {
 		debug_up();

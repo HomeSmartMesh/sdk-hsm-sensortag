@@ -3,15 +3,11 @@
 #include <logging/log.h>
 #include <net/socket.h>
 
+#include "udp_client.h"
+
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 #define SLEEP_TIME_MS   10000
-
-void send_udp()
-{
-	struct data *data = CONTAINER_OF(work, struct data, udp.recv);
-	int ret = send(data->udp.sock, lorem_ipsum, data->udp.expecting, 0);
-}
 
 void main(void)
 {
@@ -19,7 +15,7 @@ void main(void)
 
 	int count = 0;
 	while (1) {
-		send_udp();
+		send_udp("Hello", 5);
 		k_msleep(SLEEP_TIME_MS);
 		LOG_INF("loop: %d",count++);
 	}
