@@ -18,9 +18,6 @@ const char lorem_ipsum[] =
 #define INVALID_SOCK (-1)
 #define UDP_WAIT K_SECONDS(10)
 #define PEER_PORT 4242
-#if !defined(CONFIG_NET_CONFIG_PEER_IPV4_ADDR)
-#define CONFIG_NET_CONFIG_PEER_IPV4_ADDR ""
-#endif
 
 #if !defined(CONFIG_NET_CONFIG_PEER_IPV6_ADDR)
 #define CONFIG_NET_CONFIG_PEER_IPV6_ADDR "ff02::1"
@@ -63,8 +60,6 @@ static int send_udp_data(uint8_t * data, uint8_t size)
 	ret = send(ipv6.udp.sock, data, size, 0);
 
 	LOG_DBG("%s UDP: Sent %d bytes", ipv6.proto, size);
-
-	k_delayed_work_submit(&ipv6.udp.recv, UDP_WAIT);
 
 	return ret < 0 ? -EIO : 0;
 }
