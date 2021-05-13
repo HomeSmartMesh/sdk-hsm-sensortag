@@ -19,7 +19,7 @@ void main(void)
 		LOG_INF("sleeping 10 sec");
 		k_msleep(SLEEP_TIME_MS);
 		char message[20];
-		int size = sprintf(message,"Tag loop (%d)",count);
+		int size = sprintf(message,"Tag loop (%d)\n",count);
 		send_udp(message, size);
 		LOG_INF("end of loop: %d",count++);
 	}
