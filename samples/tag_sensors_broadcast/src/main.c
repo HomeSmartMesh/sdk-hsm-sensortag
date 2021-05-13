@@ -48,6 +48,8 @@ void main(void)
 		LOG_ERR("ms8607> not connected");
 	}
 
+	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
+	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	int count = 0;
 	while (1) {
 		LOG_INF("starting loop (%d)",count);
@@ -71,14 +73,14 @@ void main(void)
 
 		debug_down();	//(4)
 		char message[128];
-		int size = sprintf(message,"thread_tags/01{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-									count, voltage, light, t, h, p);
+		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+									id0,id1,count, voltage, light, t, h, p);
 
 		debug_up();		//(5)
 		send_udp(message, size);
 
 		debug_down();	//(6)
-		printf("%s",message);
+		printf("%s\n",message);
 		LOG_INF("sleeping 10 sec");
 		k_msleep(SLEEP_TIME_MS);
 
