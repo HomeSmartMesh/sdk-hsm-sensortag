@@ -72,7 +72,7 @@ void main(void)
 		}
 
 		debug_down();	//(4)
-		char message[128];
+		char message[250];
 		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
 									id0,id1,count, voltage, light, t, h, p);
 
