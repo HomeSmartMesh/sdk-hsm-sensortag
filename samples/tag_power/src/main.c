@@ -45,10 +45,7 @@ void test_sleep(uint32_t sleep_ms)
 
 static const struct pm_state_info pm_min_residency[] ={
 	{PM_STATE_RUNTIME_IDLE,0, 1000},		//  1 ms
-	{PM_STATE_SUSPEND_TO_IDLE, 0, 10000},	// 10 ms
-	{PM_STATE_STANDBY, 0, 20000},			// 20 ms
-	{PM_STATE_SUSPEND_TO_RAM, 0, 100000},	//100 ms
-	{PM_STATE_SUSPEND_TO_DISK, 0, 200000}	//200 ms
+	{PM_STATE_STANDBY, 0, 20000}			// 20 ms
 };
 
 struct pm_state_info pm_policy_next_state(int32_t ticks)
@@ -81,32 +78,14 @@ struct pm_state_info pm_policy_next_state(int32_t ticks)
 void main(void)
 {
 	gpio_pin_init();
-
-	debug_up();
-	k_sleep(K_MSEC(1));
-	debug_down();
 	LOG_INF("Hello Power management");
-	k_sleep(K_MSEC(1000));
 
-	test_sleep(2);
-	test_sleep(11);
+	test_sleep(1);
 	test_sleep(21);
-	test_sleep(101);
-	test_sleep(201);
+	test_sleep(10000);//10 sec
 
-	//test_state(PM_STATE_ACTIVE);			//104 us
-	//test_state(PM_STATE_RUNTIME_IDLE);		//110 us
-	//test_state(PM_STATE_SUSPEND_TO_IDLE);	//110 us
-	//test_state(PM_STATE_STANDBY);			//110 us
-	//test_state(PM_STATE_SUSPEND_TO_RAM);	//110 us
-	//test_state(PM_STATE_SUSPEND_TO_DISK);	//110 us
-	//test_state(PM_STATE_SOFT_OFF);
+	pm_power_state_force((struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});//PM_STATE_SOFT_OFF
 
 	while (1) {
-		debug_up();
-		k_sleep(K_MSEC(1));
-		debug_down();
-		LOG_INF("loop");
-		k_sleep(K_MSEC(999));
 	}
 }
