@@ -8,7 +8,7 @@
 #include <devicetree.h>
 #include <drivers/gpio.h>
 
-#include <power/power.h>
+#include <pm/pm.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 

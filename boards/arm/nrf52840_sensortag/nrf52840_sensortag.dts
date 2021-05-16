@@ -102,8 +102,8 @@
 &i2c0 {
 	compatible = "nordic,nrf-twi";
 	status = "okay";
-	sda-gpios = <&gpio1 15 0>;
-	scl-gpios = <&gpio1 13 0>;
+	sda-pin = <47>;
+	scl-pin = <45>;
 
 	ms8607@40 /*hum@40,press@76*/{
 		compatible = "teconnectivity,ms8607";

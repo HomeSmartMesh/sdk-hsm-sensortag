@@ -24,7 +24,7 @@ content of `power.c`
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr.h>
-#include <power/power.h>
+#include <pm/pm.h>
 #include <hal/nrf_power.h>
 #include <hal/nrf_clock.h>
 
@@ -93,5 +93,4 @@ void pm_power_state_exit_post_ops(struct pm_state_info info)
 	 */
 	irq_unlock(0);
 }
-
 ```
