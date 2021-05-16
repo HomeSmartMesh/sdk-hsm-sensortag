@@ -12,9 +12,17 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
+#define LOWPOWER_TEST
+
 #define DEBUG_PIN 29
-#define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN, 1)
-#define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN, 0)
+
+#ifdef LOWPOWER_TEST
+	#define debug_up()
+	#define debug_down()
+#else
+	#define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN, 1)
+	#define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN, 0)
+#endif
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -24,15 +32,6 @@ void gpio_pin_init()
 	if (ret < 0) {
 		LOG_ERR("gpio_pin_configure() failed");
 	}
-}
-
-void test_state(enum pm_state state)
-{
-	LOG_INF("Power state %d",state);
-	pm_power_state_force((struct pm_state_info){state, 0, 0});//PM_STATE_SOFT_OFF
-	debug_up();
-	k_sleep(K_MSEC(3000));
-	debug_down();
 }
 
 void test_sleep(uint32_t sleep_ms)
@@ -77,8 +76,10 @@ struct pm_state_info pm_policy_next_state(int32_t ticks)
 //pm_constraint_release(PM_STATE_SOFT_OFF);
 void main(void)
 {
-	gpio_pin_init();
-	LOG_INF("Hello Power management");
+	#ifndef LOWPOWER_TEST
+		gpio_pin_init();
+		LOG_INF("Hello Power management");
+	#endif
 
 	test_sleep(1);
 	test_sleep(21);

@@ -2,6 +2,7 @@
 ```bash
 west build -b nrf52840_sensortag -t guiconfig
 west build -b nrf52840_sensortag -- -DCONF_FILE=prj.conf
+west build -b nrf52840_sensortag -- -DCONF_FILE=prj-lowpower.conf
 west flash
 ```
 
@@ -10,7 +11,9 @@ device_set_power_state has no influence on GPIO as PGIO has no enable and no inf
 ## Documentation
 https://www.homesmartmesh.com/docs/microcontrollers/nrf52/thread_sensortag/#tag_power
 
-
+# Lowe power perf
+* normal sleep : ~ 3.5 mA
+* sleep with releasing HF clock : ~ 1.8 mA
 ## Zephyr patch
 content of `power.c`
 
