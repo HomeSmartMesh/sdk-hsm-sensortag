@@ -34,6 +34,11 @@ LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
 void sleep_prepare()
 {
 	nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTOP);
+
+	nrf_power_task_trigger(NRF_POWER,NRF_POWER_TASK_LOWPWR);
+
+	int volatile * const p0_out_set = (int * const)0x50000508;//out set
+	(*p0_out_set) = 0x20000000;//pin 29
 }
 
 void sleep_wakeup()
@@ -41,6 +46,8 @@ void sleep_wakeup()
     nrf_clock_event_clear(NRF_CLOCK,NRF_CLOCK_EVENT_HFCLKSTARTED);
     nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTART);
 	while(!nrf_clock_hf_is_running(NRF_CLOCK,NRF_CLOCK_HFCLK_HIGH_ACCURACY));
+	int volatile * const p0_out_clear = (int *) 0x5000050C;//out clear
+	(*p0_out_clear) = 0x20000000;//pin 29
 }
 
 /* Invoke Low Power/System Off specific Tasks */
@@ -51,9 +58,9 @@ void pm_power_state_set(struct pm_state_info info)
 		nrf_power_system_off(NRF_POWER);
 		break;
 	case PM_STATE_RUNTIME_IDLE:
-		sleep_prepare();
-		break;
 	case PM_STATE_STANDBY:
+	case PM_STATE_SUSPEND_TO_RAM:
+	case PM_STATE_SUSPEND_TO_DISK:
 		sleep_prepare();
 		break;
 	default:
@@ -70,9 +77,9 @@ void pm_power_state_exit_post_ops(struct pm_state_info info)
 		/* Nothing to do. */
 		break;
 	case PM_STATE_RUNTIME_IDLE:
-		sleep_wakeup();
-		break;
 	case PM_STATE_STANDBY:
+	case PM_STATE_SUSPEND_TO_RAM:
+	case PM_STATE_SUSPEND_TO_DISK:
 		sleep_wakeup();
 		break;
 	default:
@@ -86,4 +93,5 @@ void pm_power_state_exit_post_ops(struct pm_state_info info)
 	 */
 	irq_unlock(0);
 }
+
 ```
