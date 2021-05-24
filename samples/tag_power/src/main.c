@@ -41,11 +41,12 @@ void test_sleep(uint32_t sleep_ms)
 	debug_down();
 }
 
+#ifdef CONFIG_PM
 static const struct pm_state_info pm_min_residency[] ={
-	{PM_STATE_RUNTIME_IDLE,0, 1000},		//  1 ms
-	{PM_STATE_STANDBY, 0, 20000},			// 20 ms
-	{PM_STATE_SUSPEND_TO_RAM, 0, 100000},	// 100 ms
-	{PM_STATE_SUSPEND_TO_DISK, 0, 200000}	// 200 ms
+	{PM_STATE_RUNTIME_IDLE		,1 ,1000 , 0},		//  1 ms
+	{PM_STATE_STANDBY			,2 ,20000 , 0},	// 20 ms
+	{PM_STATE_SUSPEND_TO_RAM	,3 ,100000 , 0},	// 100 ms
+	{PM_STATE_SUSPEND_TO_DISK	,4 ,200000 , 0}	// 200 ms
 };
 
 struct pm_state_info pm_policy_next_state(int32_t ticks)
@@ -72,7 +73,7 @@ struct pm_state_info pm_policy_next_state(int32_t ticks)
 	//LOG_DBG("No suitable power state found!");
 	return (struct pm_state_info){PM_STATE_ACTIVE, 0, 0};
 }
-
+#endif
 //pm_constraint_set(PM_STATE_SOFT_OFF);
 //pm_constraint_release(PM_STATE_SOFT_OFF);
 void main(void)
@@ -100,5 +101,6 @@ void main(void)
 	pm_power_state_force((struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});//PM_STATE_SOFT_OFF
 
 	while (1) {
+		//LOG_INF(".");
 	}
 }
