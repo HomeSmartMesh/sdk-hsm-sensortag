@@ -115,7 +115,9 @@ void main(void)
 	test_sleep(1);
 	test_sleep(1);
 
-	//in this next 250 ms sleep, the os idle task keeps ticking through RTC @ 297 us period
+	//in this next 250 ms sleep
+	//Question : Why despite the `CONFIG_TICKLESS_KERNEL=y` the os idle task keeps ticking through RTC @ 297 us period
+	//https://devzone.nordicsemi.com/f/nordic-q-a/75774/nrf52840-zephyr-tickless-low-power-idle-always-ticking
 	//therefore using 'k_sleep' it's not possible to reach a long average low power mode
 	test_sleep(250);
 
