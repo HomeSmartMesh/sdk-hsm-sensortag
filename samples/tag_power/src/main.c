@@ -8,6 +8,10 @@
 #include <devicetree.h>
 #include <drivers/gpio.h>
 
+#include <hal/nrf_power.h>
+#include <hal/nrf_clock.h>
+#include <drivers/timer/system_timer.h>
+
 #include <pm/pm.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -15,9 +19,35 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define DEBUG_PIN_APP 	 2
 #define DEBUG_PIN_OS	29
 
+#define DEBUG_PIN_29_SET 	(*(int * const)0x50000508) = 0x20000000
+#define DEBUG_PIN_29_CLEAR 	(*(int *) 0x5000050C) = 0x20000000
+
 #define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 1)
 #define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 0)
 #define debug_os_down()	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 0)
+
+void app_sleep_prepare()
+{
+	nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTOP);
+
+	nrf_power_task_trigger(NRF_POWER,NRF_POWER_TASK_LOWPWR);
+
+	DEBUG_PIN_29_SET;
+
+	__WFE();
+	// Clear the internal event register.
+	__SEV();
+	__WFE();
+}
+
+void app_sleep_wakeup()
+{
+    nrf_clock_event_clear(NRF_CLOCK,NRF_CLOCK_EVENT_HFCLKSTARTED);
+    nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTART);
+	while(!nrf_clock_hf_is_running(NRF_CLOCK,NRF_CLOCK_HFCLK_HIGH_ACCURACY));
+	DEBUG_PIN_29_CLEAR;
+}
+
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -74,8 +104,7 @@ struct pm_state_info pm_policy_next_state(int32_t ticks)
 	return (struct pm_state_info){PM_STATE_ACTIVE, 0, 0};
 }
 #endif
-//pm_constraint_set(PM_STATE_SOFT_OFF);
-//pm_constraint_release(PM_STATE_SOFT_OFF);
+
 void main(void)
 {
 	gpio_pin_init();
@@ -83,24 +112,27 @@ void main(void)
 	debug_os_down();
 	LOG_INF("Hello Power management");
 
-	//int volatile * const p0_out = (int * const)0x50000504;
-	//(*p0_out) = 0x20000000;//pio set
-
 	test_sleep(1);
 	test_sleep(1);
 
-	//debug_up();
-	//pm_system_suspend(100);
-	//debug_down();
-
-	//test_sleep(21);
-	//test_sleep(101);
+	//in this next 250 ms sleep, the os idle task keeps ticking through RTC @ 297 us period
+	//therefore using 'k_sleep' it's not possible to reach a long average low power mode
 	test_sleep(250);
-	//test_sleep(10000);//10 sec
 
-	pm_power_state_force((struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});//PM_STATE_SOFT_OFF
+	#if STOP_TEST_OFF
+		pm_power_state_force((struct pm_state_info){PM_STATE_SOFT_OFF, 0, 0});//PM_STATE_SOFT_OFF
+	#endif
 
 	while (1) {
-		//LOG_INF(".");
+		//first cycle @268 us, then second @5 sec (washing out the last os tick left)
+		debug_up();
+		sys_clock_set_timeout(k_ms_to_ticks_ceil32(5000),false);//5 sec @2.9 uA
+		app_sleep_prepare();
+		app_sleep_wakeup();
+		debug_down();
+		#if LOOP_WITH_SLEEP
+			test_sleep(100);//if this line is enabled it prevents the os from stoping the idle task ticks
+		#endif
+		k_busy_wait(1000*1000);//1 sec @3 mA
 	}
 }
