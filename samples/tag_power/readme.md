@@ -15,7 +15,7 @@ https://www.homesmartmesh.com/docs/microcontrollers/nrf52/thread_sensortag/#tag_
 * normal sleep : ~ 3.5 mA
 * sleep with releasing HF clock : ~ 1.8 mA
 ## Zephyr patch
-content of `power.c`
+content of `zephyr\soc\arm\nordic_nrf\nrf52\power.c`
 
 ```c
 /*
@@ -31,14 +31,22 @@ content of `power.c`
 #include <logging/log.h>
 LOG_MODULE_DECLARE(soc, CONFIG_SOC_LOG_LEVEL);
 
+#define DEBUG_PIN_29_SET 	(*(int * const)0x50000508) = 0x20000000
+#define DEBUG_PIN_29_CLEAR 	(*(int *) 0x5000050C) = 0x20000000
+
+
 void sleep_prepare()
 {
 	nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTOP);
 
 	nrf_power_task_trigger(NRF_POWER,NRF_POWER_TASK_LOWPWR);
 
-	int volatile * const p0_out_set = (int * const)0x50000508;//out set
-	(*p0_out_set) = 0x20000000;//pin 29
+	DEBUG_PIN_29_SET;
+
+	__WFE();
+	// Clear the internal event register.
+	__SEV();
+	__WFE();
 }
 
 void sleep_wakeup()
@@ -46,8 +54,7 @@ void sleep_wakeup()
     nrf_clock_event_clear(NRF_CLOCK,NRF_CLOCK_EVENT_HFCLKSTARTED);
     nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTART);
 	while(!nrf_clock_hf_is_running(NRF_CLOCK,NRF_CLOCK_HFCLK_HIGH_ACCURACY));
-	int volatile * const p0_out_clear = (int *) 0x5000050C;//out clear
-	(*p0_out_clear) = 0x20000000;//pin 29
+	DEBUG_PIN_29_CLEAR;
 }
 
 /* Invoke Low Power/System Off specific Tasks */
