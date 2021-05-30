@@ -9,6 +9,10 @@
 #include <sensor/ms8607.h>
 #include <battery.h>
 
+#include <hal/nrf_power.h>
+#include <hal/nrf_clock.h>
+#include <drivers/timer/system_timer.h>
+
 #include "udp_client.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
@@ -17,6 +21,21 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define DEBUG_PIN 29
 #define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN, 1)
 #define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN, 0)
+
+void lp_sleep_ms(int sleep_ms)
+{
+	sys_clock_set_timeout(k_ms_to_ticks_ceil32(sleep_ms),false);//sleep @2.9 uA
+	//----------sleep prepare--------------
+	nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTOP);
+	nrf_power_task_trigger(NRF_POWER,NRF_POWER_TASK_LOWPWR);
+	__WFE();
+	__SEV();// Clear the internal event register.
+	__WFE();
+	//----------sleep wakeup--------------
+    nrf_clock_event_clear(NRF_CLOCK,NRF_CLOCK_EVENT_HFCLKSTARTED);
+    nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTART);
+	while(!nrf_clock_hf_is_running(NRF_CLOCK,NRF_CLOCK_HFCLK_HIGH_ACCURACY));
+}
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -82,7 +101,7 @@ void main(void)
 		debug_down();	//(6)
 		printf("%s\n",message);
 		LOG_INF("sleeping 10 sec");
-		k_msleep(SLEEP_TIME_MS);
+		lp_sleep_ms(SLEEP_TIME_MS);
 
 		count++;
 	}
