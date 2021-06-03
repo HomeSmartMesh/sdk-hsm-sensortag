@@ -12,19 +12,20 @@
 #include <hal/nrf_clock.h>
 #include <drivers/timer/system_timer.h>
 
-#include <pm/pm.h>
-
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-#define DEBUG_PIN_APP 	 2
-#define DEBUG_PIN_OS	29
+#define WITH_GPIO
 
-#define DEBUG_PIN_29_SET 	(*(int * const)0x50000508) = 0x20000000
-#define DEBUG_PIN_29_CLEAR 	(*(int *) 0x5000050C) = 0x20000000
+#ifdef WITH_GPIO
+	#define DEBUG_PIN_APP 	 2
+	#define DEBUG_PIN_OS	29
 
-#define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 1)
-#define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 0)
-#define debug_os_down()	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 0)
+	#define DEBUG_PIN_29_SET 	(*(int * const)0x50000508) = 0x20000000
+	#define DEBUG_PIN_29_CLEAR 	(*(int *) 0x5000050C) = 0x20000000
+
+	#define debug_up()		gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 1)
+	#define debug_down()	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 0)
+	#define debug_os_down()	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 0)
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -39,6 +40,12 @@ void gpio_pin_init()
 		LOG_ERR("gpio_pin_configure() failed");
 	}
 }
+#else
+	#define debug_up()		
+	#define debug_down()	
+	#define debug_os_down()	
+	#define gpio_pin_init()
+#endif
 
 void main(void)
 {
