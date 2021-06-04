@@ -2,6 +2,7 @@
 #include <zephyr.h>
 #include <logging/log.h>
 #include <net/socket.h>
+#include <net/net_if.h>
 #include <stdio.h>
 #include <drivers/gpio.h>
 #include <drivers/sensor.h>
@@ -9,13 +10,10 @@
 #include <sensor/ms8607.h>
 #include <battery.h>
 
-#include <hal/nrf_power.h>
-#include <hal/nrf_clock.h>
-#include <drivers/timer/system_timer.h>
+#include <net/openthread.h>
+#include <openthread/thread.h>
 
 #include "udp_client.h"
-
-#include <pm/pm.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define SLEEP_TIME_MS   10000
@@ -29,20 +27,19 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 #define DEBUG_PIN_29_SET 	(*(int * const)0x50000508) = 0x20000000
 #define DEBUG_PIN_29_CLEAR 	(*(int *) 0x5000050C) = 0x20000000
 
-void lp_sleep_ms(int sleep_ms)
-{
-	sys_clock_set_timeout(k_ms_to_ticks_ceil32(sleep_ms),false);//sleep @2.9 uA
-	//----------sleep prepare--------------
-	nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTOP);
-	nrf_power_task_trigger(NRF_POWER,NRF_POWER_TASK_LOWPWR);
-	__WFE();
-	__SEV();// Clear the internal event register.
-	__WFE();
-	//----------sleep wakeup--------------
-    nrf_clock_event_clear(NRF_CLOCK,NRF_CLOCK_EVENT_HFCLKSTARTED);
-    nrf_clock_task_trigger(NRF_CLOCK,NRF_CLOCK_TASK_HFCLKSTART);
-	while(!nrf_clock_hf_is_running(NRF_CLOCK,NRF_CLOCK_HFCLK_HIGH_ACCURACY));
-}
+//SEGGER_SYSVIEW_MODULE IPModule = {
+//	"M=test_mainMD, " \
+//	"0 SendPacket IFace=%u NumBytes=%u, " \
+//	"1 ReceivePacket Iface=%d NumBytes=%u", // sModule
+//	2, // NumEvents
+//	0,// EventOffset, Set by SEGGER_SYSVIEW_RegisterModule()
+//	NULL,// pfSendModuleDesc, NULL: No additional module description
+//	NULL,// pNext, Set by SEGGER_SYSVIEW_RegisterModule()
+//	};
+//
+//static void _IPTraceConfig(void) {
+//	SEGGER_SYSVIEW_RegisterModule(&IPModule);
+//}
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -57,42 +54,6 @@ void gpio_pin_init()
 		LOG_ERR("gpio_pin_configure() failed");
 	}
 }
-
-
-#ifdef CONFIG_PM_POLICY_APP
-static const struct pm_state_info pm_min_residency[] ={
-	{PM_STATE_RUNTIME_IDLE		,1 ,1000 , 0},		//  1 ms
-	{PM_STATE_STANDBY			,2 ,20000 , 0},	// 20 ms
-	{PM_STATE_SUSPEND_TO_RAM	,3 ,100000 , 0},	// 100 ms
-	{PM_STATE_SUSPEND_TO_DISK	,4 ,200000 , 0}	// 200 ms
-};
-
-struct pm_state_info pm_policy_next_state(int32_t ticks)
-{
-	int i;
-	static struct pm_state_info current = {PM_STATE_ACTIVE,0, 1000};
-
-	for (i = ARRAY_SIZE(pm_min_residency) - 1; i >= 0; i--) {
-		if (!pm_constraint_get(pm_min_residency[i].state)) {
-			continue;
-		}
-
-		if ((ticks == K_TICKS_FOREVER) || (ticks >= k_us_to_ticks_ceil32(pm_min_residency[i].min_residency_us))) 
-		{
-			if(current.state != pm_min_residency[i].state)
-			{
-				LOG_INF("Selected power state %d (ticks: %d, min_residency: %u)",pm_min_residency[i].state, ticks,pm_min_residency[i].min_residency_us);
-				current = pm_min_residency[i];
-			}
-			return pm_min_residency[i];
-		}
-	}
-
-	//LOG_DBG("No suitable power state found!");
-	return (struct pm_state_info){PM_STATE_ACTIVE, 0, 0};
-}
-#endif
-
 
 void main(void)
 {
@@ -113,24 +74,25 @@ void main(void)
 		LOG_ERR("ms8607> not connected");
 	}
 
+	struct otInstance *openthread = openthread_get_default_instance();
+	struct net_if * net = net_if_get_default();
+
 	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	int count = 0;
 	while (1) {
+		DEBUG_PIN_29_SET;
 		LOG_INF("starting loop (%d)",count);
 		battery_start();//loop pulse battery 100 us
 		DEBUG_PIN_2_SET;
 		k_sleep(K_MSEC(10));
 		DEBUG_PIN_2_CLEAR;	//(6)
+
 		int32_t voltage_mv = battery_get_mv();
 		float voltage = voltage_mv;
 		voltage /= 1000;
 
-		#define MEASURE_SENSORS
-
-		#ifdef MEASURE_SENSORS
 		float light = veml6030_auto_measure(light_dev);
-		//float light = 0;
 
 		float t, p, h;
 		enum ms8607_status status = ms8607_read_temperature_pressure_humidity(&t,&p,&h);
@@ -138,27 +100,29 @@ void main(void)
 			LOG_ERR("ms8607> status = %d",status);
 		}
 
+		DEBUG_PIN_2_SET;
+		if(!net_if_is_up(net))
+		{
+			net_if_up(net);
+			otThreadSetEnabled(openthread,true);
+		}
+		DEBUG_PIN_2_CLEAR;
+
 		char message[250];
 		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
 									id0,id1,count, voltage, light, t, h, p);
-		#else
-		char message[250];
-		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d}",id0,id1,count);
-		#endif
 		send_udp(message, size);
+
+		DEBUG_PIN_2_SET;		//loop pulse 2 send_udp
+		otThreadSetEnabled(openthread,false);
+		net_if_down(net);
+		DEBUG_PIN_2_CLEAR;
 
 		printf("%s\n",message);
 		LOG_INF("sleeping 1 sec");
-		DEBUG_PIN_2_SET;		//loop pulse 2 send_udp
-		//k_busy_wait(3*1000*1000);//3 sec
-		//lp_sleep_ms(1);
-		//DEBUG_PIN_2_CLEAR;
-		//lp_sleep_ms(1);
-		//DEBUG_PIN_2_SET;		//loop pulse 2 send_udp
-		//lp_sleep_ms(1000);
-		k_sleep(K_MSEC(3000));
-		DEBUG_PIN_2_CLEAR;
-
 		count++;
+		DEBUG_PIN_29_CLEAR;
+		k_sleep(K_MSEC(3000));
+
 	}
 }
