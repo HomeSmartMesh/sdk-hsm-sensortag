@@ -15,31 +15,16 @@
 
 #include "udp_client.h"
 
-LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
 #define SLEEP_TIME_MS   10000
 
 #define DEBUG_PIN_APP 	 2
 #define DEBUG_PIN_OS	29
 
-#define DEBUG_PIN_2_SET 	(*(int * const)0x50000508) = 0x00000004
-#define DEBUG_PIN_2_CLEAR 	(*(int *) 0x5000050C) = 0x00000004
-
-#define DEBUG_PIN_29_SET 	(*(int * const)0x50000508) = 0x20000000
-#define DEBUG_PIN_29_CLEAR 	(*(int *) 0x5000050C) = 0x20000000
-
-//SEGGER_SYSVIEW_MODULE IPModule = {
-//	"M=test_mainMD, " \
-//	"0 SendPacket IFace=%u NumBytes=%u, " \
-//	"1 ReceivePacket Iface=%d NumBytes=%u", // sModule
-//	2, // NumEvents
-//	0,// EventOffset, Set by SEGGER_SYSVIEW_RegisterModule()
-//	NULL,// pfSendModuleDesc, NULL: No additional module description
-//	NULL,// pNext, Set by SEGGER_SYSVIEW_RegisterModule()
-//	};
-//
-//static void _IPTraceConfig(void) {
-//	SEGGER_SYSVIEW_RegisterModule(&IPModule);
-//}
+#define APP_SET 	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 1)	
+#define APP_CLEAR 	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 0)
+#define LOOP_SET 	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 1)
+#define LOOP_CLEAR 	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 0)
 
 const struct device *gpio_dev;
 void gpio_pin_init()
@@ -58,12 +43,18 @@ void gpio_pin_init()
 void main(void)
 {
 	gpio_pin_init();
+	APP_CLEAR;
+	LOOP_CLEAR;
+	k_sleep(K_MSEC(10));
 
-	DEBUG_PIN_2_SET;
-	k_sleep(K_MSEC(1));
-	DEBUG_PIN_2_CLEAR;
+	APP_SET;
+	k_sleep(K_MSEC(10));
+	APP_CLEAR;
+
 	LOG_INF("Hello Sensors Broadcast");
+	k_sleep(K_MSEC(10));
 
+	#ifdef USE_SENSORS
 	battery_init();
 	const struct device *light_dev = device_get_binding(DT_LABEL(DT_INST(0, vishay_veml6030)));
 	//getting the ms8607 is not needed due to the hardcoding of i2c adresses, multi instance is not possible
@@ -73,6 +64,7 @@ void main(void)
 	}else{
 		LOG_ERR("ms8607> not connected");
 	}
+	#endif
 
 	struct otInstance *openthread = openthread_get_default_instance();
 	struct net_if * net = net_if_get_default();
@@ -81,13 +73,13 @@ void main(void)
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	int count = 0;
 	while (1) {
-		DEBUG_PIN_29_SET;
+		LOOP_SET;
 		LOG_INF("starting loop (%d)",count);
+		#ifdef USE_SENSORS
 		battery_start();//loop pulse battery 100 us
-		DEBUG_PIN_2_SET;
-		k_sleep(K_MSEC(10));
-		DEBUG_PIN_2_CLEAR;	//(6)
+		#endif
 
+		#ifdef USE_SENSORS
 		int32_t voltage_mv = battery_get_mv();
 		float voltage = voltage_mv;
 		voltage /= 1000;
@@ -99,29 +91,34 @@ void main(void)
 		if(status != ms8607_status_ok){
 			LOG_ERR("ms8607> status = %d",status);
 		}
+		char message[250];
+		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+									id0,id1,count, voltage, light, t, h, p);
+		#else
+		char message[250];
+		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d}",id0,id1,count);
+		#endif
 
-		DEBUG_PIN_2_SET;
+		APP_SET;
 		if(!net_if_is_up(net))
 		{
 			net_if_up(net);
 			otThreadSetEnabled(openthread,true);
 		}
-		DEBUG_PIN_2_CLEAR;
+		APP_CLEAR;
 
-		char message[250];
-		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-									id0,id1,count, voltage, light, t, h, p);
+
 		send_udp(message, size);
 
-		DEBUG_PIN_2_SET;		//loop pulse 2 send_udp
+		APP_SET;		//loop pulse 2 send_udp
 		otThreadSetEnabled(openthread,false);
 		net_if_down(net);
-		DEBUG_PIN_2_CLEAR;
+		APP_CLEAR;
 
 		printf("%s\n",message);
 		LOG_INF("sleeping 1 sec");
 		count++;
-		DEBUG_PIN_29_CLEAR;
+		LOOP_CLEAR;
 		k_sleep(K_MSEC(3000));
 
 	}
