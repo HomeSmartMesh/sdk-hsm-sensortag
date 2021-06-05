@@ -65,21 +65,14 @@ void main(void)
 		char message[250];
 		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d}",id0,id1,count);
 
+		nrf_radio_power_set(NRF_RADIO,true);
+
 		APP_SET;
-		if(!net_if_is_up(net))
-		{
-			nrf_radio_power_set(NRF_RADIO,true);
-			net_if_up(net);
-			otThreadSetEnabled(openthread,true);
-		}
-		APP_CLEAR;
 		send_udp(message, size);
-		k_sleep(K_MSEC(100));
-		APP_SET;		//loop pulse 2 send_udp
-		otThreadSetEnabled(openthread,false);
-		net_if_down(net);
-		nrf_radio_power_set(NRF_RADIO,false);
 		APP_CLEAR;
+		k_sleep(K_MSEC(100));
+
+		nrf_radio_power_set(NRF_RADIO,false);
 
 		printf("%s\n",message);
 		LOG_INF("sleeping 1 sec");
