@@ -12,8 +12,8 @@
 #include <net/openthread.h>
 #include <openthread/platform/radio.h>
 
-#define SERVER_ADDR		"fdxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx"
-#define SERVER_PORT		5000
+#define SERVER_ADDR		"ff02::1"
+#define SERVER_PORT		4242
 
 const struct device *temp_sensor = DEVICE_DT_GET(DT_INST(0, nordic_nrf_temp));
 
