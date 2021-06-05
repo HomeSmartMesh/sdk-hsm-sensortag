@@ -47,6 +47,14 @@ void gpio_pin_init()
 	#define gpio_pin_init()
 #endif
 
+void test_delay(int ms)
+{
+	debug_up();
+	k_sleep(K_MSEC(ms));
+	debug_down();
+	k_sleep(K_MSEC(10));
+}
+
 void main(void)
 {
 	gpio_pin_init();
@@ -54,20 +62,18 @@ void main(void)
 	debug_os_down();
 	LOG_INF("Hello Power management");
 
-	debug_up();
-	k_sleep(K_MSEC(1));
-	debug_down();
-	k_sleep(K_MSEC(1));
-	debug_up();
-
-	k_sleep(K_MSEC(250));
-	debug_down();
-
 	while (1) {
-		debug_up();
-		k_sleep(K_MSEC(5000));//@3 uA
-		debug_down();
-		k_busy_wait(2000*1000);//@3 mA
+		test_delay(1);
+		test_delay(2);
+		test_delay(5);
+		test_delay(5);
+		test_delay(5);
+		test_delay(5);
+		test_delay(5);
+		test_delay(20);
+		test_delay(50);
+		test_delay(100);
+		k_busy_wait(50*1000);//@3 mA
 	}
 }
 
