@@ -58,7 +58,7 @@ void battery_start()
 		LOG_ERR("ADC reading failed with error %d.\n", err);
 		return;
 	}else{
-		LOG_INF("battery_start> adc_read()");
+		LOG_DBG("battery_start> adc_read()");
 	}
 }
 

@@ -16,7 +16,7 @@
 #include "udp_client.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
-
+//#define CONFIG_GPIO_DEBUG
 #ifdef CONFIG_GPIO_DEBUG
 	#include <drivers/gpio.h>
 	#define DEBUG_PIN_APP 	 2

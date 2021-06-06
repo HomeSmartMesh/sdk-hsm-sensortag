@@ -281,8 +281,6 @@ float veml6030_auto_measure(const struct device *dev)
 	float measure_lux = 0;
 
 	veml6030_power_on(dev);//4 ms min after power on => will update the drv_data ->integration_ms and ->gain
-	//start with the fastest integration time, will update `drv_data->config_it_gain`
-	veml6030_it_gain_update(drv_data,VEML6030_ALS_CONF_ALS_IT_25_ms  | VEML6030_ALS_CONF_ALS_GAIN_x1_8);
 	bool optimal_measure = false;// no measure yet
 	while(!optimal_measure)
 	{
