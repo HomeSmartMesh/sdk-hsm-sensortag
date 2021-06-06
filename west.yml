@@ -14,7 +14,7 @@ manifest:
     - name: zephyr
       repo-path: zephyr
       remote: zephyrproject
-      revision: 41e885947e4f48aae0866df9e5fee657afb7c1cc
+      revision: 79a6c07536bc14583198f8e3555df6134d8822cf
       import:
         name-whitelist:
           - cmsis

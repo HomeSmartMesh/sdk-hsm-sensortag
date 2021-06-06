@@ -42,16 +42,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
 	#define gpio_pin_init()
 #endif
 
-void openthread_set_mtd()
-{
-	otInstance *openthread = openthread_get_default_instance();
-    bool rxOnWhenIdle = false;
-    bool deviceType   = false;//Not FTD just MTD
-    bool networkData  = false;//No full Network Data
-	otLinkModeConfig linkMode = {rxOnWhenIdle, deviceType, networkData};
-	otThreadSetLinkMode(openthread,linkMode);
-}
-
 void main(void)
 {
 	gpio_pin_init();
@@ -60,7 +50,6 @@ void main(void)
 	k_sleep(K_MSEC(10));
 
 	LOG_INF("Hello Sensors Broadcast");
-	openthread_set_mtd();
 
 	battery_init();
 	const struct device *light_dev = device_get_binding(DT_LABEL(DT_INST(0, vishay_veml6030)));
