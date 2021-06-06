@@ -16,9 +16,8 @@
 #include "udp_client.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
-#define SLEEP_TIME_MS   10000
 
-#ifdef CONFIG_GPIO
+#ifdef CONFIG_GPIO_DEBUG
 	#include <drivers/gpio.h>
 	#define DEBUG_PIN_APP 	 2
 	#define DEBUG_PIN_LOOP	29
