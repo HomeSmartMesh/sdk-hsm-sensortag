@@ -3,5 +3,6 @@ menu "Home Smart Mesh"
 
 rsource "samples/Kconfig"
 rsource "drivers/Kconfig"
+rsource "subsys/Kconfig"
 
 endmenu

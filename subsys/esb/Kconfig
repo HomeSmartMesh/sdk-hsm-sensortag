@@ -1,0 +1,71 @@
+#
+# Copyright (c) 2018 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig ESB
+	bool "Enhanced ShockBurst"
+	select NRFX_PPI if HAS_HW_NRF_PPI
+	select NRFX_DPPI if HAS_HW_NRF_DPPIC
+	default n
+	help
+	  Enable ESB functionality.
+
+if ESB
+
+config ESB_MAX_PAYLOAD_LENGTH
+	int "Maximum payload size"
+	default 32
+	range 1 252
+	help
+	  The maximum size of the payload.
+
+config ESB_TX_FIFO_SIZE
+	int "TX buffer length"
+	default 8
+	help
+	  The length of the TX FIFO buffer, in number of elements.
+
+config ESB_RX_FIFO_SIZE
+	int "RX buffer length"
+	default 8
+	help
+	  The length of the RX FIFO buffer, in number of elements.
+
+config ESB_PIPE_COUNT
+	int "Maximum number of pipes"
+	default 8
+	range 1 8
+	help
+	  The maximum number of pipes allowed in the API. Can be used if you
+	  need to restrict the number of pipes used. The purpose is to prevent
+	  accidental use of additional pipes, but it's not a problem leaving
+	  this at 8 even if fewer pipes are used.
+
+menu "Hardware selection (alter with care)"
+
+choice ESB_SYS_TIMER
+	default ESB_SYS_TIMER2
+	prompt "Timer to use for the ESB system timer."
+
+config ESB_SYS_TIMER0
+	bool "TIMER0"
+
+config ESB_SYS_TIMER1
+	bool "TIMER1"
+
+config ESB_SYS_TIMER2
+	bool "TIMER2"
+
+config ESB_SYS_TIMER3
+	bool "TIMER3"
+
+config ESB_SYS_TIMER4
+	bool "TIMER4"
+
+endchoice
+
+endmenu
+
+endif # NRF_ENHANCED_SHOCKBURST
