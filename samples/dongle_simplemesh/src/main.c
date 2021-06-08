@@ -3,17 +3,25 @@
 #include <stdio.h>
 #include <usb/usb_device.h>
 
-LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+#include "simplemesh.h"
+
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 void main(void)
 {
-	int ret;
-	ret = usb_enable(NULL);
-	if (ret != 0) {
-		LOG_ERR("Failed to enable USB");
-		return;
-	}
+	#ifdef CONFIG_USB
+		int ret;
+		ret = usb_enable(NULL);
+		if (ret != 0) {
+			LOG_ERR("Failed to enable USB");
+			return;
+		}
+	#endif
 	LOG_INF("Hello Simple Mesh");
+
+	#ifdef CONFIG_ESB
+		sm_start_tx();//still manual change from TX, RX
+	#endif
 
 	int loop = 0;
 	while (1) {
