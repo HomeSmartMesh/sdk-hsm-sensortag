@@ -5,74 +5,118 @@
  */
 #include <drivers/clock_control.h>
 #include <drivers/clock_control/nrf_clock_control.h>
-#include <drivers/gpio.h>
 #include <irq.h>
 #include <logging/log.h>
 #include <nrf.h>
 #include <esb.h>
 #include <zephyr.h>
 #include <zephyr/types.h>
+#include <stdio.h>
 
 #include "simplemesh.h"
 
 LOG_MODULE_REGISTER(esb_ptrx, LOG_LEVEL_DBG);
 
-#define LED_ON 0
-#define LED_OFF 1
-static bool ready = true;
-
-static const struct device *led_port;
 static struct esb_payload rx_payload;
 
-static int leds_init(void)
+static volatile bool esb_completed = false;
+static volatile bool esb_tx_complete = false;
+static uint8_t g_ttl = 2;
+
+bool UICR_is_listening()
 {
-	led_port = device_get_binding(DT_GPIO_LABEL(DT_ALIAS(led0), gpios));
-	if (!led_port) {
-		LOG_ERR("Could not bind to LED port %s",
-			DT_GPIO_LABEL(DT_ALIAS(led0), gpios));
-		return -EIO;
-	}
-
-	const uint8_t pins[] = {DT_GPIO_PIN(DT_ALIAS(led0), gpios),
-			     DT_GPIO_PIN(DT_ALIAS(led1), gpios),
-			     DT_GPIO_PIN(DT_ALIAS(led2), gpios),
-			     DT_GPIO_PIN(DT_ALIAS(led3), gpios)};
-
-	for (size_t i = 0; i < ARRAY_SIZE(pins); i++) {
-		int err = gpio_pin_configure(led_port, pins[i], GPIO_OUTPUT);
-
-		if (err) {
-			LOG_ERR("Unable to configure LED%u, err %d.", i, err);
-			led_port = NULL;
-			return err;
-		}
-	}
-
-	return 0;
+	return true;
 }
 
-static void leds_update(uint8_t value)
+void mesh_pre_tx()
 {
-	bool led0_status = !(value % 8 > 0 && value % 8 <= 4);
-	bool led1_status = !(value % 8 > 1 && value % 8 <= 5);
-	bool led2_status = !(value % 8 > 2 && value % 8 <= 6);
-	bool led3_status = !(value % 8 > 3);
+    if(UICR_is_listening())
+    {
+        esb_stop_rx();
+        LOG_DBG("switch to IDLE mode that aloows TX");
+    }
 
-	gpio_port_pins_t mask =
-		1 << DT_GPIO_PIN(DT_ALIAS(led0), gpios) |
-		1 << DT_GPIO_PIN(DT_ALIAS(led1), gpios) |
-		1 << DT_GPIO_PIN(DT_ALIAS(led2), gpios) |
-		1 << DT_GPIO_PIN(DT_ALIAS(led3), gpios);
+}
 
-	gpio_port_value_t val =
-		led0_status << DT_GPIO_PIN(DT_ALIAS(led0), gpios) |
-		led1_status << DT_GPIO_PIN(DT_ALIAS(led1), gpios) |
-		led2_status << DT_GPIO_PIN(DT_ALIAS(led2), gpios) |
-		led3_status << DT_GPIO_PIN(DT_ALIAS(led3), gpios);
+void mesh_post_tx()
+{
+    if(UICR_is_listening())
+    {
+        esb_start_rx();
+        LOG_DBG("switch to RX mode");
+    }
+	esb_tx_complete = true;
+}
 
-	if (led_port != NULL) {
-		gpio_port_set_masked_raw(led_port, mask, val);
-	}
+
+void mesh_message_2_esb_payload(message_t *msg, struct esb_payload *p_tx_payload)
+{
+    //esb only parameters
+    p_tx_payload->noack    = true;//Never request an ESB acknowledge
+    p_tx_payload->pipe     = 0;//pipe is the selection of the address to use
+
+    p_tx_payload->data[1] = msg->control;
+    p_tx_payload->data[2] = msg->pid;
+    p_tx_payload->data[3] = msg->source;
+
+    uint8_t start_payload;
+    if(MESH_IS_BROADCAST(msg->control))
+    {
+        start_payload = MESH_Broadcast_Header_Length;
+    }
+    else
+    {
+        p_tx_payload->data[4] = msg->dest;
+        start_payload = MESH_P2P_Header_Length;
+    }
+
+    //this is the total ESB packet length
+    p_tx_payload->length   = msg->payload_length + start_payload;
+    p_tx_payload->data[0] = p_tx_payload->length;
+    memcpy( p_tx_payload->data+start_payload,
+            msg->payload,
+            msg->payload_length);
+}
+
+void mesh_tx_message(message_t* p_msg)
+{
+    mesh_pre_tx();
+
+    struct esb_payload l_tx_payload;
+    mesh_message_2_esb_payload(p_msg,&l_tx_payload);
+
+    esb_completed = false;//reset the check
+    LOG_DBG("TX esb payload length = %d",l_tx_payload.data[0]);
+    //should not wait for esb_completed here as does not work from ISR context
+
+    //NRF_ESB_TXMODE_AUTO is used no need to call nrf_esb_start_tx()
+    //which could be used for a precise time transmission
+    esb_write_payload(&l_tx_payload);
+    
+}
+
+void mesh_bcast_data(uint8_t pid,uint8_t * data,uint8_t size)
+{
+    message_t msg;
+
+    msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
+    msg.pid     = pid;
+    msg.source  = 0xFF;//TODO config node id
+    msg.payload = data;
+    msg.payload_length = size;
+
+    mesh_tx_message(&msg);
+}
+//limited to 255
+void mesh_bcast_text(char *text)
+{
+    uint8_t size = strlen(text);
+    if(size>MAX_MESH_MESSAGE_SIZE)//truncate in case of long message
+    {
+        text[MAX_MESH_MESSAGE_SIZE-1] = '>';
+        size = MAX_MESH_MESSAGE_SIZE;
+    }
+    mesh_bcast_data(Mesh_Pid_Text,(uint8_t*)text,size);
 }
 
 int clocks_start(void)
@@ -108,34 +152,8 @@ int clocks_start(void)
 	return 0;
 }
 
-
-bool UICR_is_listening()
-{
-	return true;
-}
-
-void mesh_pre_tx()
-{
-    if(UICR_is_listening())
-    {
-        esb_stop_rx();
-        LOG_DBG("switch to IDLE mode that aloows TX");
-    }
-
-}
-
-void mesh_post_tx()
-{
-    if(UICR_is_listening())
-    {
-        esb_start_rx();
-        LOG_DBG("switch to RX mode");
-    }
-}
-
 void event_handler(struct esb_evt const *event)
 {
-	ready = true;
 	switch (event->evt_id) {
 	case ESB_EVENT_TX_SUCCESS:
 		LOG_DBG("TX SUCCESS EVENT");
@@ -148,21 +166,16 @@ void event_handler(struct esb_evt const *event)
 		break;
 	case ESB_EVENT_RX_RECEIVED:
 		if (esb_read_rx_payload(&rx_payload) == 0) {
-			LOG_DBG("Packet received, len %d : "
-				"0x%02x, 0x%02x, 0x%02x, 0x%02x, "
-				"0x%02x, 0x%02x, 0x%02x, 0x%02x",
-				rx_payload.length, rx_payload.data[0],
-				rx_payload.data[1], rx_payload.data[2],
-				rx_payload.data[3], rx_payload.data[4],
-				rx_payload.data[5], rx_payload.data[6],
-				rx_payload.data[7]);
-
-			leds_update(rx_payload.data[1]);
+			printf("%s\n",rx_payload.data);
 		} else {
 			LOG_ERR("Error while reading rx packet");
 		}
 		break;
+	default:
+		LOG_ERR("ESB Unhandled Event (%d)",event->evt_id);
+		break;
 	}
+	esb_completed = true;
 }
 
 
@@ -217,8 +230,6 @@ void sm_start_rx()
 
 	LOG_INF("Enhanced ShockBurst prx sample");
 
-	leds_init();
-
 	err = esb_initialize(ESB_MODE_PRX);
 	if (err) {
 		LOG_ERR("ESB initialization failed, err %d", err);
@@ -257,7 +268,6 @@ void sm_start_tx(void)
 	if (err) {
 		return;
 	}
-	leds_init();
 
 	err = esb_initialize(ESB_MODE_PTX);
 	if (err) {
@@ -270,17 +280,14 @@ void sm_start_tx(void)
 
 	tx_payload.noack = false;
 	k_sleep(K_MSEC(300));
+	int tx_count = 0;
 	while (1) {
 		LOG_INF("looping");
-		esb_flush_tx();
-		leds_update(tx_payload.data[1]);
+		char message[20];
+		sprintf(message,"tx loop %d",tx_count);
+		mesh_bcast_text(message);
 
-	    mesh_pre_tx();
-		err = esb_write_payload(&tx_payload);
-		if (err) {
-			LOG_ERR("Payload write failed, err %d", err);
-		}
-		tx_payload.data[1]++;
+		tx_count++;
 		k_sleep(K_MSEC(500));
 	}
 }
