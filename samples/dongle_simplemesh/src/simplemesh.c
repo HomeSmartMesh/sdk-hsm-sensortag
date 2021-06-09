@@ -220,9 +220,6 @@ void event_handler(struct esb_evt const *event)
 int esb_initialize(enum esb_mode mode)
 {
 	int err;
-	/* These are arbitrary default addresses. In end user products
-	 * different addresses should be used for each set of devices.
-	 */
 	uint8_t base_addr_0[4] = {0xE7, 0xE7, 0xE7, 0xE7};
 	uint8_t base_addr_1[4] = {0xC2, 0xC2, 0xC2, 0xC2};
 	uint8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8};
@@ -256,6 +253,12 @@ int esb_initialize(enum esb_mode mode)
 		return err;
 	}
 
+	LOG_INF("setting channel 2");
+    err = esb_set_rf_channel(2);
+	if (err) {
+		return err;
+	}
+
 	return 0;
 }
 
@@ -263,9 +266,6 @@ int esb_initialize(enum esb_mode mode)
 void sm_start_rx()
 {
 	int err;
-	static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
-		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17);
-
 	LOG_INF("rx test INF");
 	LOG_DBG("rx test DBG");
 	LOG_INF("Enhanced ShockBurst prx sample");
@@ -280,17 +280,9 @@ void sm_start_rx()
 		LOG_ERR("ESB initialization failed, err %d", err);
 		return;
 	}
-
 	LOG_INF("Initialization complete");
 
-	err = esb_write_payload(&tx_payload);
-	if (err) {
-		LOG_ERR("Write payload, err %d", err);
-		return;
-	}
-
 	LOG_INF("Setting up for packet receiption");
-
 	err = esb_start_rx();
 	if (err) {
 		LOG_ERR("RX setup failed, err %d", err);

@@ -212,14 +212,12 @@ static uint32_t ppi_all_channels_mask;
  */
 static void (*on_radio_disabled)(void);
 static void (*on_radio_end)(void);
-static void (*update_rf_payload_format)(uint32_t payload_length);
 
 /*  The following functions are assigned to the function pointers above. */
 static void on_radio_disabled_tx_noack(void);
 static void on_radio_disabled_tx(void);
 static void on_radio_disabled_tx_wait_for_ack(void);
 static void on_radio_disabled_rx(void);
-static void on_radio_disabled_rx_ack(void);
 
 /*  Function to do bytewise bit-swap on an unsigned 32-bit value */
 static uint32_t bytewise_bit_swap(const uint8_t *input)
@@ -284,39 +282,19 @@ static inline void apply_errata143_workaround(void)
 	}
 }
 
-static void update_rf_payload_format_esb_dpl(uint32_t payload_length)
+static void update_rf_payload_format_esb_dpl()
 {
-#if (CONFIG_ESB_MAX_PAYLOAD_LENGTH <= 32)
-	/* Using 6 bits for length */
-	NRF_RADIO->PCNF0 = (0 << RADIO_PCNF0_S0LEN_Pos) |
-			   (6 << RADIO_PCNF0_LFLEN_Pos) |
-			   (3 << RADIO_PCNF0_S1LEN_Pos);
-#else
-	/* Using 8 bits for length */
-	NRF_RADIO->PCNF0 = (0 << RADIO_PCNF0_S0LEN_Pos) |
-			   (8 << RADIO_PCNF0_LFLEN_Pos) |
-			   (3 << RADIO_PCNF0_S1LEN_Pos);
-#endif
-	NRF_RADIO->PCNF1 =
-		(RADIO_PCNF1_WHITEEN_Disabled << RADIO_PCNF1_WHITEEN_Pos) |
-		(RADIO_PCNF1_ENDIAN_Big << RADIO_PCNF1_ENDIAN_Pos) |
-		((esb_addr.addr_length - 1) << RADIO_PCNF1_BALEN_Pos) |
-		(0 << RADIO_PCNF1_STATLEN_Pos) |
-		(CONFIG_ESB_MAX_PAYLOAD_LENGTH << RADIO_PCNF1_MAXLEN_Pos);
-}
+    // modified to be byte alligned with no esb, simple custom HomeSmartMesh protocol
+    NRF_RADIO->PCNF0 = (0 << RADIO_PCNF0_S0LEN_Pos) |
+                       (8 << RADIO_PCNF0_LFLEN_Pos) |
+                       (8 << RADIO_PCNF0_S1LEN_Pos) ;
 
-static void update_rf_payload_format_esb(uint32_t payload_length)
-{
-	NRF_RADIO->PCNF0 = (1 << RADIO_PCNF0_S0LEN_Pos) |
-			   (0 << RADIO_PCNF0_LFLEN_Pos) |
-			   (1 << RADIO_PCNF0_S1LEN_Pos);
+    NRF_RADIO->PCNF1 = (RADIO_PCNF1_WHITEEN_Disabled    << RADIO_PCNF1_WHITEEN_Pos) |
+                       (RADIO_PCNF1_ENDIAN_Big          << RADIO_PCNF1_ENDIAN_Pos)  |
+                       ((esb_addr.addr_length - 1)    << RADIO_PCNF1_BALEN_Pos)   |
+                       (0                               << RADIO_PCNF1_STATLEN_Pos) |
+                       (CONFIG_ESB_MAX_PAYLOAD_LENGTH   << RADIO_PCNF1_MAXLEN_Pos);
 
-	NRF_RADIO->PCNF1 =
-		(RADIO_PCNF1_WHITEEN_Disabled << RADIO_PCNF1_WHITEEN_Pos) |
-		(RADIO_PCNF1_ENDIAN_Big << RADIO_PCNF1_ENDIAN_Pos) |
-		((esb_addr.addr_length - 1) << RADIO_PCNF1_BALEN_Pos) |
-		(payload_length << RADIO_PCNF1_STATLEN_Pos) |
-		(payload_length << RADIO_PCNF1_MAXLEN_Pos);
 }
 
 static void update_radio_addresses(uint8_t update_mask)
@@ -384,24 +362,6 @@ static bool update_radio_bitrate(void)
 	return true;
 }
 
-static bool update_radio_protocol(void)
-{
-	switch (esb_cfg.protocol) {
-	case ESB_PROTOCOL_ESB_DPL:
-		update_rf_payload_format = update_rf_payload_format_esb_dpl;
-		break;
-
-	case ESB_PROTOCOL_ESB:
-		update_rf_payload_format = update_rf_payload_format_esb;
-		break;
-
-	default:
-		/* Should not be reached */
-		return false;
-	}
-	return true;
-}
-
 static bool update_radio_crc(void)
 {
 	switch (esb_cfg.crc) {
@@ -435,9 +395,8 @@ static bool update_radio_parameters(void)
 
 	update_radio_tx_power();
 	params_valid &= update_radio_bitrate();
-	params_valid &= update_radio_protocol();
 	params_valid &= update_radio_crc();
-	update_rf_payload_format(esb_cfg.payload_length);
+	update_rf_payload_format_esb_dpl();
 	params_valid &=
 	    (esb_cfg.retransmit_delay >= RETRANSMIT_DELAY_MIN);
 
@@ -509,31 +468,24 @@ static void tx_fifo_remove_last(void)
  *  @retval true   Operation successful.
  *  @retval false  Operation failed.
  */
-static bool rx_fifo_push_rfbuf(uint8_t pipe, uint8_t pid)
+static bool rx_fifo_push_rfbuf(uint8_t pipe)
 {
 	if (rx_fifo.count >= CONFIG_ESB_RX_FIFO_SIZE) {
 		return false;
 	}
 
-	if (esb_cfg.protocol == ESB_PROTOCOL_ESB_DPL) {
-		if (rx_payload_buffer[0] > CONFIG_ESB_MAX_PAYLOAD_LENGTH) {
-			return false;
-		}
-		rx_fifo.payload[rx_fifo.back]->length = rx_payload_buffer[0];
-	} else if (esb_cfg.mode == ESB_MODE_PTX) {
-		/* Received packet is an acknowledgment */
-		rx_fifo.payload[rx_fifo.back]->length = 0;
-	} else {
-		rx_fifo.payload[rx_fifo.back]->length = esb_cfg.payload_length;
+	//esb_cfg.protocol == ESB_PROTOCOL_ESB_DPL
+	if (rx_payload_buffer[0] > CONFIG_ESB_MAX_PAYLOAD_LENGTH) {
+		return false;
 	}
+	rx_fifo.payload[rx_fifo.back]->length = rx_payload_buffer[0];
 
-	memcpy(rx_fifo.payload[rx_fifo.back]->data, &rx_payload_buffer[2],
+    //copy everything, length included although it is already available on the length param
+	memcpy(rx_fifo.payload[rx_fifo.back]->data, &rx_payload_buffer[0],
 	       rx_fifo.payload[rx_fifo.back]->length);
 
-	rx_fifo.payload[rx_fifo.back]->pipe = pipe;
 	rx_fifo.payload[rx_fifo.back]->rssi = NRF_RADIO->RSSISAMPLE;
-	rx_fifo.payload[rx_fifo.back]->pid = pid;
-	rx_fifo.payload[rx_fifo.back]->noack = !(rx_payload_buffer[1] & 0x01);
+	//TODO HSM Check ack : rx_fifo.payload[rx_fifo.back]->noack = !(rx_payload_buffer[1] & 0x01);
 
 	if (++rx_fifo.back >= CONFIG_ESB_RX_FIFO_SIZE) {
 		rx_fifo.back = 0;
@@ -589,64 +541,17 @@ static void ppi_init(void)
 
 static void start_tx_transaction(void)
 {
-	bool ack;
-
 	last_tx_attempts = 1;
 	/* Prepare the payload */
 	current_payload = tx_fifo.payload[tx_fifo.front];
 
-	switch (esb_cfg.protocol) {
-	case ESB_PROTOCOL_ESB:
-		update_rf_payload_format(current_payload->length);
-		tx_payload_buffer[0] = current_payload->pid;
-		tx_payload_buffer[1] = 0;
-		memcpy(&tx_payload_buffer[2], current_payload->data,
-		       current_payload->length);
+	memcpy(&tx_payload_buffer[0], current_payload->data,
+			current_payload->length);
 
-		NRF_RADIO->SHORTS = radio_shorts_common |
-				    RADIO_SHORTS_DISABLED_RXEN_Msk;
-		NRF_RADIO->INTENSET = RADIO_INTENSET_DISABLED_Msk |
-				      RADIO_INTENSET_READY_Msk;
-
-		/* Configure the retransmit counter */
-		retransmits_remaining = esb_cfg.retransmit_count;
-		on_radio_disabled = on_radio_disabled_tx;
-		esb_state = ESB_STATE_PTX_TX_ACK;
-		break;
-
-	case ESB_PROTOCOL_ESB_DPL:
-		ack = !current_payload->noack || !esb_cfg.selective_auto_ack;
-		tx_payload_buffer[0] = current_payload->length;
-		tx_payload_buffer[1] = current_payload->pid << 1;
-		tx_payload_buffer[1] |= current_payload->noack ? 0x00 : 0x01;
-		memcpy(&tx_payload_buffer[2], current_payload->data,
-		       current_payload->length);
-
-		/* Handling ack if noack is set to false or if
-		 * selective auto ack is turned off
-		 */
-		if (ack) {
-			NRF_RADIO->SHORTS = radio_shorts_common |
-					    RADIO_SHORTS_DISABLED_RXEN_Msk;
-			NRF_RADIO->INTENSET = RADIO_INTENSET_DISABLED_Msk |
-					      RADIO_INTENSET_READY_Msk;
-
-			/* Configure the retransmit counter */
-			retransmits_remaining = esb_cfg.retransmit_count;
-			on_radio_disabled = on_radio_disabled_tx;
-			esb_state = ESB_STATE_PTX_TX_ACK;
-		} else {
-			NRF_RADIO->SHORTS = radio_shorts_common;
-			NRF_RADIO->INTENSET = RADIO_INTENSET_DISABLED_Msk;
-			on_radio_disabled = on_radio_disabled_tx_noack;
-			esb_state = ESB_STATE_PTX_TX;
-		}
-		break;
-
-	default:
-		/* Should not be reached */
-		break;
-	}
+	NRF_RADIO->SHORTS = radio_shorts_common;
+	NRF_RADIO->INTENSET = RADIO_INTENSET_DISABLED_Msk;
+	on_radio_disabled = on_radio_disabled_tx_noack;
+	esb_state = ESB_STATE_PTX_TX;
 
 	NRF_RADIO->TXADDRESS = current_payload->pipe;
 	NRF_RADIO->RXADDRESSES = 1 << current_payload->pipe;
@@ -703,9 +608,7 @@ static void on_radio_disabled_tx(void)
 
 	NRF_RADIO->EVENTS_END = 0;
 
-	if (esb_cfg.protocol == ESB_PROTOCOL_ESB) {
-		update_rf_payload_format(0);
-	}
+	update_rf_payload_format_esb_dpl();//TODO update might not be required here
 
 	NRF_RADIO->PACKETPTR = (uint32_t)rx_payload_buffer;
 	on_radio_disabled = on_radio_disabled_tx_wait_for_ack;
@@ -733,8 +636,7 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 
 		if (esb_cfg.protocol != ESB_PROTOCOL_ESB &&
 		    rx_payload_buffer[0] > 0) {
-			if (rx_fifo_push_rfbuf((uint8_t)NRF_RADIO->TXADDRESS,
-					       rx_payload_buffer[1] >> 1)) {
+			if (rx_fifo_push_rfbuf((uint8_t)NRF_RADIO->TXADDRESS)) {
 				interrupt_flags |=
 					INT_RX_DATA_RECEIVED_MSK;
 			}
@@ -767,7 +669,7 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 			 */
 			NRF_RADIO->SHORTS = radio_shorts_common |
 					    RADIO_SHORTS_DISABLED_RXEN_Msk;
-			update_rf_payload_format(current_payload->length);
+			update_rf_payload_format_esb_dpl();
 			NRF_RADIO->PACKETPTR = (uint32_t)tx_payload_buffer;
 			on_radio_disabled = on_radio_disabled_tx;
 			esb_state = ESB_STATE_PTX_TX_ACK;
@@ -783,7 +685,7 @@ static void on_radio_disabled_tx_wait_for_ack(void)
 static void clear_events_restart_rx(void)
 {
 	NRF_RADIO->SHORTS = radio_shorts_common;
-	update_rf_payload_format(esb_cfg.payload_length);
+	update_rf_payload_format_esb_dpl();
 	NRF_RADIO->PACKETPTR = (uint32_t)rx_payload_buffer;
 	NRF_RADIO->EVENTS_DISABLED = 0;
 	NRF_RADIO->TASKS_DISABLE = 1;
@@ -799,57 +701,8 @@ static void clear_events_restart_rx(void)
 	NRF_RADIO->TASKS_RXEN = 1;
 }
 
-static void on_radio_disabled_rx_dpl(bool retransmit_payload,
-				     struct pipe_info *pipe_info)
-{
-	uint32_t pipe = NRF_RADIO->RXMATCH;
-
-	if (tx_fifo.count > 0 && ack_pl_wrap_pipe[pipe] != 0) {
-		current_payload = ack_pl_wrap_pipe[pipe]->p_payload;
-
-		/* Pipe stays in ACK with payload until TX FIFO is empty */
-		/* Do not report TX success on first ack payload or retransmit */
-		if (pipe_info->ack_payload == true && !retransmit_payload) {
-			ack_pl_wrap_pipe[pipe]->in_use = false;
-			ack_pl_wrap_pipe[pipe] = ack_pl_wrap_pipe[pipe]->p_next;
-			tx_fifo.count--;
-			if (tx_fifo.count > 0 && ack_pl_wrap_pipe[pipe] != 0) {
-				current_payload = ack_pl_wrap_pipe[pipe]->p_payload;
-			} else {
-				current_payload = 0;
-			}
-
-			/* ACK payloads also require TX_DS */
-			/* (page 40 of the 'nRF24LE1_Product_Specification_rev1_6.pdf') */
-			interrupt_flags |= INT_TX_SUCCESS_MSK;
-		}
-
-		if (current_payload != 0) {
-			pipe_info->ack_payload = true;
-			update_rf_payload_format(current_payload->length);
-			tx_payload_buffer[0] = current_payload->length;
-			memcpy(&tx_payload_buffer[2],
-					current_payload->data,
-					current_payload->length);
-		} else {
-			pipe_info->ack_payload = false;
-			update_rf_payload_format(0);
-			tx_payload_buffer[0] = 0;
-		}
-	} else {
-		pipe_info->ack_payload = false;
-		update_rf_payload_format(0);
-		tx_payload_buffer[0] = 0;
-	}
-
-	tx_payload_buffer[1] = rx_payload_buffer[1];
-}
-
 static void on_radio_disabled_rx(void)
 {
-	bool retransmit_payload = false;
-	bool send_rx_event = true;
-	struct pipe_info *pipe_info;
 
 	if (NRF_RADIO->CRCSTATUS == 0) {
 		clear_events_restart_rx();
@@ -861,65 +714,16 @@ static void on_radio_disabled_rx(void)
 		return;
 	}
 
-	pipe_info = &rx_pipe_info[NRF_RADIO->RXMATCH];
-	if (NRF_RADIO->RXCRC == pipe_info->crc &&
-	    (rx_payload_buffer[1] >> 1) == pipe_info->pid) {
-		retransmit_payload = true;
-		send_rx_event = false;
+	clear_events_restart_rx();
+
+	/* Push the new packet to the RX buffer and trigger a received
+		* event if the operation was
+		* successful.
+		*/
+	if (rx_fifo_push_rfbuf(NRF_RADIO->RXMATCH)) {
+		interrupt_flags |= INT_RX_DATA_RECEIVED_MSK;
+		NVIC_SetPendingIRQ(ESB_EVT_IRQ);
 	}
-
-	pipe_info->pid = rx_payload_buffer[1] >> 1;
-	pipe_info->crc = NRF_RADIO->RXCRC;
-
-	/* Check if an ack should be sent */
-	if ((esb_cfg.selective_auto_ack == false) ||
-	    ((rx_payload_buffer[1] & 0x01) == 1)) {
-		NRF_RADIO->SHORTS = radio_shorts_common |
-				    RADIO_SHORTS_DISABLED_RXEN_Msk;
-
-		switch (esb_cfg.protocol) {
-		case ESB_PROTOCOL_ESB_DPL:
-			on_radio_disabled_rx_dpl(retransmit_payload, pipe_info);
-			break;
-
-		case ESB_PROTOCOL_ESB:
-			update_rf_payload_format(0);
-			tx_payload_buffer[0] = rx_payload_buffer[0];
-			tx_payload_buffer[1] = 0;
-			break;
-		}
-
-		esb_state = ESB_STATE_PRX_SEND_ACK;
-		NRF_RADIO->TXADDRESS = NRF_RADIO->RXMATCH;
-
-		NRF_RADIO->PACKETPTR = (uint32_t)tx_payload_buffer;
-		on_radio_disabled = on_radio_disabled_rx_ack;
-	} else {
-		clear_events_restart_rx();
-	}
-
-	if (send_rx_event) {
-		/* Push the new packet to the RX buffer and trigger a received
-		 * event if the operation was
-		 * successful.
-		 */
-		if (rx_fifo_push_rfbuf(NRF_RADIO->RXMATCH, pipe_info->pid)) {
-			interrupt_flags |= INT_RX_DATA_RECEIVED_MSK;
-			NVIC_SetPendingIRQ(ESB_EVT_IRQ);
-		}
-	}
-}
-
-static void on_radio_disabled_rx_ack(void)
-{
-	NRF_RADIO->SHORTS = radio_shorts_common |
-			    RADIO_SHORTS_DISABLED_TXEN_Msk;
-	update_rf_payload_format(esb_cfg.payload_length);
-
-	NRF_RADIO->PACKETPTR = (uint32_t)rx_payload_buffer;
-	on_radio_disabled = on_radio_disabled_rx;
-
-	esb_state = ESB_STATE_PRX;
 }
 
 /* Retrieve interrupt flags and reset them.
@@ -1013,9 +817,6 @@ int esb_init(const struct esb_config *config)
 
 	interrupt_flags = 0;
 
-	memset(rx_pipe_info, 0, sizeof(rx_pipe_info));
-	memset(pids, 0, sizeof(pids));
-
 	update_radio_parameters();
 
 	/* Configure radio address registers according to ESB default values */
@@ -1023,6 +824,8 @@ int esb_init(const struct esb_config *config)
 	NRF_RADIO->BASE1 = 0x43434343;
 	NRF_RADIO->PREFIX0 = 0x23C343E7;
 	NRF_RADIO->PREFIX1 = 0x13E363A3;
+
+	//will be overridden by further user's call to set_base_address_X
 
 	initialize_fifos();
 	sys_timer_init();
@@ -1077,9 +880,6 @@ void esb_disable(void)
 
 	reset_fifos();
 
-	memset(rx_pipe_info, 0, sizeof(rx_pipe_info));
-	memset(pids, 0, sizeof(pids));
-
 	/*  Disable the radio */
 	irq_disable(ESB_EVT_IRQ);
 
@@ -1093,15 +893,6 @@ bool esb_is_idle(void)
 	return (esb_state == ESB_STATE_IDLE);
 }
 
-static struct payload_wrap *find_free_payload_cont(void)
-{
-	for (int i = 0; i < CONFIG_ESB_TX_FIFO_SIZE; i++) {
-		if (!ack_pl_wrap[i].in_use)
-			return &ack_pl_wrap[i];
-	}
-	return 0;
-}
-
 int esb_write_payload(const struct esb_payload *payload)
 {
 	if (!esb_initialized) {
@@ -1110,6 +901,7 @@ int esb_write_payload(const struct esb_payload *payload)
 	if (payload == NULL) {
 		return -EINVAL;
 	}
+	//now the payload contains HSM header
 	if (payload->length == 0 ||
 	    payload->length > CONFIG_ESB_MAX_PAYLOAD_LENGTH ||
 	    (esb_cfg.protocol == ESB_PROTOCOL_ESB &&
@@ -1125,47 +917,18 @@ int esb_write_payload(const struct esb_payload *payload)
 
 	uint32_t key = irq_lock();
 
-	if (esb_cfg.mode == ESB_MODE_PTX) {
-		memcpy(tx_fifo.payload[tx_fifo.back], payload,
-			sizeof(struct esb_payload));
+	memcpy(tx_fifo.payload[tx_fifo.back], payload,
+		sizeof(struct esb_payload));
 
-		pids[payload->pipe] = (pids[payload->pipe] + 1) % (PID_MAX + 1);
-		tx_fifo.payload[tx_fifo.back]->pid = pids[payload->pipe];
-
-		if (++tx_fifo.back >= CONFIG_ESB_TX_FIFO_SIZE) {
-			tx_fifo.back = 0;
-		}
-
-		tx_fifo.count++;
-	} else {
-		struct payload_wrap *new_ack_payload = find_free_payload_cont();
-
-		if (new_ack_payload != 0) {
-			new_ack_payload->in_use = true;
-			new_ack_payload->p_next = 0;
-			memcpy(new_ack_payload->p_payload, payload, sizeof(struct esb_payload));
-
-			pids[payload->pipe] = (pids[payload->pipe] + 1) % (PID_MAX + 1);
-			new_ack_payload->p_payload->pid = pids[payload->pipe];
-
-			if (ack_pl_wrap_pipe[payload->pipe] == 0) {
-				ack_pl_wrap_pipe[payload->pipe] = new_ack_payload;
-			} else {
-				struct payload_wrap *pl = ack_pl_wrap_pipe[payload->pipe];
-
-				while (pl->p_next != 0) {
-					pl = (struct payload_wrap *)pl->p_next;
-				}
-				pl->p_next = (struct payload_wrap *)new_ack_payload;
-			}
-			tx_fifo.count++;
-		}
+	if (++tx_fifo.back >= CONFIG_ESB_TX_FIFO_SIZE) {
+		tx_fifo.back = 0;
 	}
+
+	tx_fifo.count++;
 
 	irq_unlock(key);
 
-	if (esb_cfg.mode == ESB_MODE_PTX &&
-	    esb_cfg.tx_mode == ESB_TXMODE_AUTO &&
+	if (esb_cfg.tx_mode == ESB_TXMODE_AUTO &&
 	    esb_state == ESB_STATE_IDLE) {
 		start_tx_transaction();
 	}
@@ -1188,13 +951,12 @@ int esb_read_rx_payload(struct esb_payload *payload)
 
 	uint32_t key = irq_lock();
 
-	payload->length = rx_fifo.payload[rx_fifo.front]->length;
-	payload->pipe = rx_fifo.payload[rx_fifo.front]->pipe;
-	payload->rssi = rx_fifo.payload[rx_fifo.front]->rssi;
-	payload->pid = rx_fifo.payload[rx_fifo.front]->pid;
-	payload->noack = rx_fifo.payload[rx_fifo.front]->noack;
-	memcpy(payload->data, rx_fifo.payload[rx_fifo.front]->data,
-	       payload->length);
+    struct esb_payload * p_exit_payload = rx_fifo.payload[rx_fifo.front];//exit_point replaced by "Front of queue (first out)."
+    payload->length  = p_exit_payload->length;
+    payload->pipe    = p_exit_payload->pipe;
+    payload->rssi    = p_exit_payload->rssi;
+
+    memcpy( payload->data,p_exit_payload->data,payload->length);
 
 	if (++rx_fifo.front >= CONFIG_ESB_RX_FIFO_SIZE) {
 		rx_fifo.front = 0;
@@ -1341,7 +1103,7 @@ int esb_set_address_length(uint8_t length)
 
 	esb_addr.addr_length = length;
 
-	update_rf_payload_format(esb_cfg.payload_length);
+	update_rf_payload_format_esb_dpl();
 
 	return 0;
 }
