@@ -20,7 +20,7 @@ void main(void)
 	LOG_INF("Hello Simple Mesh");
 
 	#ifdef CONFIG_ESB
-		sm_start_tx();//still manual change from TX, RX
+		sm_start_rx();//still manual change from TX, RX
 	#endif
 
 	int loop = 0;

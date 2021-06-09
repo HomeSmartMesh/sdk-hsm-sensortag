@@ -17,7 +17,9 @@
 
 LOG_MODULE_REGISTER(esb_ptrx, LOG_LEVEL_DBG);
 
+static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
+static message_t rx_msg;
 
 static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
@@ -78,20 +80,46 @@ void mesh_message_2_esb_payload(message_t *msg, struct esb_payload *p_tx_payload
             msg->payload_length);
 }
 
+void mesh_esb_2_message_payload(struct esb_payload *p_rx_payload,message_t *msg)
+{
+    msg->control = p_rx_payload->data[1];
+    msg->pid = p_rx_payload->data[2];
+    msg->source = p_rx_payload->data[3];
+
+    msg->rssi = p_rx_payload->rssi;
+    //dest is processed by esb rx function
+    uint8_t payload_start;
+    if(MESH_IS_BROADCAST(msg->control))
+    {
+        msg->dest = 255;
+        payload_start = 4;
+    }
+    else
+    {
+        msg->dest = p_rx_payload->data[4];
+        payload_start = 5;
+    }
+    msg->payload_length = p_rx_payload->length - payload_start;
+
+    if(msg->payload_length > 0)
+    {
+        msg->payload = p_rx_payload->data + payload_start;
+    }
+}
+
 void mesh_tx_message(message_t* p_msg)
 {
     mesh_pre_tx();
 
-    struct esb_payload l_tx_payload;
-    mesh_message_2_esb_payload(p_msg,&l_tx_payload);
+    mesh_message_2_esb_payload(p_msg,&tx_payload);
 
     esb_completed = false;//reset the check
-    LOG_DBG("TX esb payload length = %d",l_tx_payload.data[0]);
+    LOG_DBG("TX esb payload length = %d",tx_payload.data[0]);
     //should not wait for esb_completed here as does not work from ISR context
 
     //NRF_ESB_TXMODE_AUTO is used no need to call nrf_esb_start_tx()
     //which could be used for a precise time transmission
-    esb_write_payload(&l_tx_payload);
+    esb_write_payload(&tx_payload);
     
 }
 
@@ -152,6 +180,19 @@ int clocks_start(void)
 	return 0;
 }
 
+void mesh_consume_rx_messages()
+{
+    while(esb_read_rx_payload(&rx_payload) == 0)
+    {
+        mesh_esb_2_message_payload(&rx_payload,&rx_msg);
+        LOG_INF("RX> source:%d , pid:0x%02X , length:%d",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+		if(rx_msg.pid == Mesh_Pid_Text)
+		{
+			printk("text = '%s'",(char*)rx_msg.payload);
+		}
+    }
+}
+
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
@@ -165,11 +206,8 @@ void event_handler(struct esb_evt const *event)
 		mesh_post_tx();
 		break;
 	case ESB_EVENT_RX_RECEIVED:
-		if (esb_read_rx_payload(&rx_payload) == 0) {
-			printf("%s\n",rx_payload.data);
-		} else {
-			LOG_ERR("Error while reading rx packet");
-		}
+		LOG_DBG("RX RECEIVED");
+		mesh_consume_rx_messages();
 		break;
 	default:
 		LOG_ERR("ESB Unhandled Event (%d)",event->evt_id);
@@ -228,7 +266,14 @@ void sm_start_rx()
 	static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
 		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17);
 
+	LOG_INF("rx test INF");
+	LOG_DBG("rx test DBG");
 	LOG_INF("Enhanced ShockBurst prx sample");
+
+	err = clocks_start();
+	if (err) {
+		return;
+	}
 
 	err = esb_initialize(ESB_MODE_PRX);
 	if (err) {
@@ -262,6 +307,8 @@ void sm_start_tx(void)
 		0x01, 0x00, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08);
 
 
+	LOG_INF("tx test INF");
+	LOG_DBG("tx test DBG");
 	LOG_INF("Enhanced ShockBurst ptx sample");
 
 	err = clocks_start();

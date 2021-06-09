@@ -29,7 +29,6 @@ typedef struct
 }message_t;
 
 
-void sm_start();
-
+void sm_start_rx();
 void sm_start_tx();
 
