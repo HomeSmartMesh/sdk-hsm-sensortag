@@ -19,14 +19,17 @@ void main(void)
 	#endif
 	LOG_INF("Hello Simple Mesh");
 
-	#ifdef CONFIG_ESB
-		sm_start_rx();//still manual change from TX, RX
-	#endif
+	sm_start();
 
 	int loop = 0;
+	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
+	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	while (1) {
-		LOG_INF("sm> loop %d",loop);
-		k_sleep(K_MSEC(3000));
+		char message[50];
+		sprintf(message,"simplemesh/%04lX%04lX{\"alive\":%d}",id0,id1,loop);
+		mesh_bcast_text(message);
+		printk("%s\n",message);
+		k_sleep(K_SECONDS(2));
 		loop++;
 	}
 }

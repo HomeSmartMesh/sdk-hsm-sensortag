@@ -1,9 +1,10 @@
 #include <stdint.h>
 
-#define MAX_MESH_MESSAGE_SIZE (CONFIG_ESB_MAX_PAYLOAD_LENGTH-4)
 
 #define MESH_Broadcast_Header_Length 4
 #define MESH_P2P_Header_Length 5
+
+#define MAX_MESH_MESSAGE_SIZE (CONFIG_ESB_MAX_PAYLOAD_LENGTH-MESH_P2P_Header_Length)
 
 #define Mesh_Pid_Text       0x16
 
@@ -28,7 +29,5 @@ typedef struct
     uint8_t *payload;
 }message_t;
 
-
-void sm_start_rx();
-void sm_start_tx();
-
+void sm_start();
+void mesh_bcast_text(char *text);

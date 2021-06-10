@@ -15,7 +15,17 @@
 
 #include "simplemesh.h"
 
-LOG_MODULE_REGISTER(esb_ptrx, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_INF);
+
+#define STACKSIZE 1024
+#define PRIORITY 99
+
+void simplemesh_thread();
+
+K_SEM_DEFINE(sem_rx, 0, 1);
+K_THREAD_DEFINE(sm_receiver, STACKSIZE, simplemesh_thread, 
+                NULL, NULL, NULL, PRIORITY, 0, 0);
+
 
 static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
@@ -35,7 +45,7 @@ void mesh_pre_tx()
     if(UICR_is_listening())
     {
         esb_stop_rx();
-        LOG_DBG("switch to IDLE mode that aloows TX");
+        LOG_DBG("switch to IDLE mode that allows TX");
     }
 
 }
@@ -180,19 +190,6 @@ int clocks_start(void)
 	return 0;
 }
 
-void mesh_consume_rx_messages()
-{
-    while(esb_read_rx_payload(&rx_payload) == 0)
-    {
-        mesh_esb_2_message_payload(&rx_payload,&rx_msg);
-        LOG_INF("RX> source:%d , pid:0x%02X , length:%d",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
-		if(rx_msg.pid == Mesh_Pid_Text)
-		{
-			printk("text = '%s'",(char*)rx_msg.payload);
-		}
-    }
-}
-
 void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
@@ -207,7 +204,7 @@ void event_handler(struct esb_evt const *event)
 		break;
 	case ESB_EVENT_RX_RECEIVED:
 		LOG_DBG("RX RECEIVED");
-		mesh_consume_rx_messages();
+		k_sem_give(&sem_rx);
 		break;
 	default:
 		LOG_ERR("ESB Unhandled Event (%d)",event->evt_id);
@@ -217,7 +214,7 @@ void event_handler(struct esb_evt const *event)
 }
 
 
-int esb_initialize(enum esb_mode mode)
+int esb_initialize()
 {
 	int err;
 	uint8_t base_addr_0[4] = {0xE7, 0xE7, 0xE7, 0xE7};
@@ -229,7 +226,6 @@ int esb_initialize(enum esb_mode mode)
 	config.protocol = ESB_PROTOCOL_ESB_DPL;
 	config.retransmit_delay = 600;
 	config.bitrate = ESB_BITRATE_2MBPS;
-	config.mode = mode;
 	config.event_handler = event_handler;
 	config.selective_auto_ack = true;
 
@@ -253,80 +249,57 @@ int esb_initialize(enum esb_mode mode)
 		return err;
 	}
 
-	LOG_INF("setting channel 2");
-    err = esb_set_rf_channel(2);
+	LOG_INF("setting channel 20");
+    err = esb_set_rf_channel(20);
 	if (err) {
 		return err;
+	}
+
+	if(UICR_is_listening())
+	{
+		LOG_INF("Setting up for packet receiption");
+		err = esb_start_rx();
+		if (err) {
+			LOG_ERR("RX setup failed, err %d", err);
+			return err;
+		}
 	}
 
 	return 0;
 }
 
-
-void sm_start_rx()
+void sm_start()
 {
 	int err;
-	LOG_INF("rx test INF");
-	LOG_DBG("rx test DBG");
-	LOG_INF("Enhanced ShockBurst prx sample");
-
 	err = clocks_start();
 	if (err) {
 		return;
 	}
 
-	err = esb_initialize(ESB_MODE_PRX);
+	err = esb_initialize();
 	if (err) {
 		LOG_ERR("ESB initialization failed, err %d", err);
 		return;
 	}
-	LOG_INF("Initialization complete");
-
-	LOG_INF("Setting up for packet receiption");
-	err = esb_start_rx();
-	if (err) {
-		LOG_ERR("RX setup failed, err %d", err);
-		return;
-	}
-
-	return;
+	LOG_INF("sm_start initialization complete");
 }
 
-void sm_start_tx(void)
+void simplemesh_thread()
 {
-	int err;
-	static struct esb_payload tx_payload = ESB_CREATE_PAYLOAD(0,
-		0x01, 0x00, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08);
-
-
-	LOG_INF("tx test INF");
-	LOG_DBG("tx test DBG");
-	LOG_INF("Enhanced ShockBurst ptx sample");
-
-	err = clocks_start();
-	if (err) {
-		return;
-	}
-
-	err = esb_initialize(ESB_MODE_PTX);
-	if (err) {
-		LOG_ERR("ESB initialization failed, err %d", err);
-		return;
-	}
-
-	LOG_INF("Initialization complete");
-	LOG_INF("Sending test packet");
-
-	tx_payload.noack = false;
-	k_sleep(K_MSEC(300));
-	int tx_count = 0;
-	while (1) {
-		LOG_INF("looping");
-		char message[20];
-		sprintf(message,"tx loop %d",tx_count);
-		mesh_bcast_text(message);
-
-		tx_count++;
-		k_sleep(K_MSEC(500));
+	while(true)
+	{
+		k_sem_take(&sem_rx, K_FOREVER);
+		while(esb_read_rx_payload(&rx_payload) == 0)
+		{
+			mesh_esb_2_message_payload(&rx_payload,&rx_msg);
+			if(rx_msg.pid == Mesh_Pid_Text)
+			{
+				printk("%s\n",(char*)rx_msg.payload);
+			}
+			else
+			{
+				LOG_INF("RX> source:%d , pid:0x%02X , length:%d",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+			}
+		}
 	}
 }
