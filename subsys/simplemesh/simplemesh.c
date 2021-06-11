@@ -35,14 +35,9 @@ static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
 static uint8_t g_ttl = 2;
 
-bool UICR_is_listening()
-{
-	return true;
-}
-
 void mesh_pre_tx()
 {
-    if(UICR_is_listening())
+    if(CONFIG_SM_LISTENER)
     {
         esb_stop_rx();
         LOG_DBG("switch to IDLE mode that allows TX");
@@ -52,7 +47,7 @@ void mesh_pre_tx()
 
 void mesh_post_tx()
 {
-    if(UICR_is_listening())
+    if(CONFIG_SM_LISTENER)
     {
         esb_start_rx();
         LOG_DBG("switch to RX mode");
@@ -136,7 +131,10 @@ void mesh_tx_message(message_t* p_msg)
 void mesh_bcast_data(uint8_t pid,uint8_t * data,uint8_t size)
 {
     message_t msg;
-
+	if(size > MAX_MESH_MESSAGE_SIZE)
+	{
+		return;
+	}
     msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
     msg.pid     = pid;
     msg.source  = 0xFF;//TODO config node id
@@ -255,7 +253,7 @@ int esb_initialize()
 		return err;
 	}
 
-	if(UICR_is_listening())
+	if(CONFIG_SM_LISTENER)
 	{
 		LOG_INF("Setting up for packet receiption");
 		err = esb_start_rx();

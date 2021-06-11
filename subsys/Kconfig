@@ -5,3 +5,4 @@
 #
 
 rsource "esb/Kconfig"
+rsource "simplemesh/Kconfig"

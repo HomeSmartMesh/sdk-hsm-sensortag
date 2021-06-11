@@ -1,0 +1,16 @@
+menuconfig SIMPLEMESH
+	bool "Simple Mesh Protocol"
+	default n
+	depends on ESB
+	help
+	  Enable SIMPLEMESH functionality.
+
+if SIMPLEMESH
+
+config SM_LISTENER
+	bool "device RX listen when idle"
+	default y
+	help
+	  If the device is listening when not transmitting
+
+endif # SIMPLEMESH

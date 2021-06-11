@@ -744,6 +744,9 @@ static void get_and_clear_irqs(uint32_t *interrupts)
 
 static void RADIO_IRQHandler(void)
 {
+    //nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_SLEEP);
+    //nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_SLEEP);
+
 	if (NRF_RADIO->EVENTS_READY &&
 	    (NRF_RADIO->INTENSET & RADIO_INTENSET_READY_Msk)) {
 		NRF_RADIO->EVENTS_READY = 0;
