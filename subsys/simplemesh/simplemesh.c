@@ -37,21 +37,18 @@ static uint8_t g_ttl = 2;
 
 void mesh_pre_tx()
 {
-    if(CONFIG_SM_LISTENER)
-    {
+	#ifdef CONFIG_SM_LISTENER
         esb_stop_rx();
         LOG_DBG("switch to IDLE mode that allows TX");
-    }
-
+    #endif
 }
 
 void mesh_post_tx()
 {
-    if(CONFIG_SM_LISTENER)
-    {
+	#ifdef CONFIG_SM_LISTENER
         esb_start_rx();
         LOG_DBG("switch to RX mode");
-    }
+    #endif
 	esb_tx_complete = true;
 }
 
@@ -253,15 +250,14 @@ int esb_initialize()
 		return err;
 	}
 
-	if(CONFIG_SM_LISTENER)
-	{
+	#ifdef CONFIG_SM_LISTENER
 		LOG_INF("Setting up for packet receiption");
 		err = esb_start_rx();
 		if (err) {
 			LOG_ERR("RX setup failed, err %d", err);
 			return err;
 		}
-	}
+	#endif
 
 	return 0;
 }

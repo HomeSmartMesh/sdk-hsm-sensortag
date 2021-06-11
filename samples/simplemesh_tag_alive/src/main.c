@@ -9,15 +9,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 void main(void)
 {
-	#ifdef CONFIG_USB
-		int ret;
-		ret = usb_enable(NULL);
-		if (ret != 0) {
-			LOG_ERR("Failed to enable USB");
-			return;
-		}
-	#endif
-	LOG_INF("Hello Simple Mesh");
+	LOG_INF("Hello Simple Mesh from Sensor Tag");
 
 	sm_start();
 
@@ -29,7 +21,7 @@ void main(void)
 		sprintf(message,"simplemesh/%04lX%04lX{\"alive\":%d}",id0,id1,loop);
 		mesh_bcast_text(message);
 		printk("%s\n",message);
-		k_sleep(K_SECONDS(2));
+		k_sleep(K_SECONDS(4));
 		loop++;
 	}
 }

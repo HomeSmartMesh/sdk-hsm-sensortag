@@ -29,7 +29,7 @@ void main(void)
 		sprintf(message,"simplemesh/%04lX%04lX{\"alive\":%d}",id0,id1,loop);
 		mesh_bcast_text(message);
 		printk("%s\n",message);
-		k_sleep(K_SECONDS(2));
+		k_sleep(K_SECONDS(20));
 		loop++;
 	}
 }
