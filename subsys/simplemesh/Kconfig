@@ -13,4 +13,10 @@ config SM_LISTENER
 	help
 	  If the device is listening when not transmitting
 
+config SM_CHANNEL
+	int "RF Channel"
+	default 20
+	help
+	  The RF Channel (2400 + SM_CHANNEL) MHz
+
 endif # SIMPLEMESH
