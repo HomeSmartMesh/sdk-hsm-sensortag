@@ -7,11 +7,27 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
+void rx_handler(message_t* msg)
+{
+	if(msg->pid == Mesh_Pid_Text){
+		msg->payload[msg->payload_length] = '\0';
+		printk("%s\n",(char*)msg->payload);
+	}
+}
+
 void main(void)
 {
-	LOG_INF("Hello Simple Mesh from Sensor Tag");
+	#ifdef CONFIG_USB
+		int ret;
+		ret = usb_enable(NULL);
+		if (ret != 0) {
+			LOG_ERR("Failed to enable USB");
+			return;
+		}
+	#endif
+	LOG_INF("Hello Simple Mesh on DWM1001");
 
-	sm_start(NULL);
+	sm_start(rx_handler);
 
 	int loop = 0;
 	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
@@ -21,7 +37,7 @@ void main(void)
 		sprintf(message,"simplemesh/%04lX%04lX{\"alive\":%d}",id0,id1,loop);
 		mesh_bcast_text(message);
 		printk("%s\n",message);
-		k_sleep(K_SECONDS(4));
+		k_sleep(K_SECONDS(20));
 		loop++;
 	}
 }

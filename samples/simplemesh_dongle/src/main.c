@@ -19,7 +19,7 @@ void main(void)
 	#endif
 	LOG_INF("Hello Simple Mesh");
 
-	sm_start();
+	sm_start(NULL);
 
 	int loop = 0;
 	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing

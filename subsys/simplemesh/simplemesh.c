@@ -32,6 +32,8 @@ static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
 static message_t rx_msg;
 
+static mesh_rx_handler_t m_app_rx_handler = NULL;
+
 static volatile bool esb_enabled = false;
 static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
@@ -272,8 +274,11 @@ int esb_initialize()
 	return 0;
 }
 
-void sm_start()
+void sm_start(mesh_rx_handler_t rx_handler)
 {
+
+    m_app_rx_handler = rx_handler;
+
 	int err;
 	err = clocks_start();
 	if (err) {
@@ -296,7 +301,11 @@ void simplemesh_thread()
 		while(esb_read_rx_payload(&rx_payload) == 0)
 		{
 			mesh_esb_2_message_payload(&rx_payload,&rx_msg);
-			if(rx_msg.pid == Mesh_Pid_Text)
+			if(m_app_rx_handler != NULL)
+			{
+				m_app_rx_handler(&rx_msg);
+			}
+			else if(rx_msg.pid == Mesh_Pid_Text)
 			{
 				printk("%s\n",(char*)rx_msg.payload);
 			}

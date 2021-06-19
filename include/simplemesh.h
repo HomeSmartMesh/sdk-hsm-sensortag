@@ -29,5 +29,7 @@ typedef struct
     uint8_t *payload;
 }message_t;
 
-void sm_start();
+typedef void (*mesh_rx_handler_t)(message_t*);
+
+void sm_start(mesh_rx_handler_t rx_handler);
 void mesh_bcast_text(char *text);
