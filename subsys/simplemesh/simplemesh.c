@@ -17,7 +17,7 @@
 
 LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_INF);
 
-#define STACKSIZE 1024
+#define STACKSIZE 4096
 #define PRIORITY 99
 
 int esb_initialize();
@@ -320,3 +320,4 @@ void simplemesh_thread()
 		}
 	}
 }
+

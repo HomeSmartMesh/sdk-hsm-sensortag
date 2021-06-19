@@ -1,5 +1,8 @@
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define MESH_Broadcast_Header_Length 4
 #define MESH_P2P_Header_Length 5
@@ -34,3 +37,7 @@ typedef void (*mesh_rx_handler_t)(message_t*);
 void sm_start(mesh_rx_handler_t rx_handler);
 void sm_get_uid(char* text);
 void mesh_bcast_text(char *text);
+
+#ifdef __cplusplus
+}
+#endif
