@@ -39,6 +39,11 @@ static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
 static uint8_t g_ttl = 2;
 
+void sm_get_uid(char* text)
+{
+	sprintf(text,"%04lX%04lX",(long unsigned int)NRF_FICR->DEVICEID[0],(long unsigned int)NRF_FICR->DEVICEID[1]);
+}
+
 void mesh_pre_tx()
 {
 	if(!esb_enabled)
@@ -62,7 +67,6 @@ void mesh_post_tx()
     #endif
 	esb_tx_complete = true;
 }
-
 
 void mesh_message_2_esb_payload(message_t *msg, struct esb_payload *p_tx_payload)
 {

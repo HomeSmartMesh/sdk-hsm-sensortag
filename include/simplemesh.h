@@ -32,4 +32,5 @@ typedef struct
 typedef void (*mesh_rx_handler_t)(message_t*);
 
 void sm_start(mesh_rx_handler_t rx_handler);
+void sm_get_uid(char* text);
 void mesh_bcast_text(char *text);
