@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_INF);
 #define STACKSIZE 1024
 #define PRIORITY 99
 
+int esb_initialize();
 void simplemesh_thread();
 
 K_SEM_DEFINE(sem_rx, 0, 1);
@@ -31,12 +32,17 @@ static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
 static message_t rx_msg;
 
+static volatile bool esb_enabled = false;
 static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
 static uint8_t g_ttl = 2;
 
 void mesh_pre_tx()
 {
+	if(!esb_enabled)
+	{
+		esb_initialize();
+	}
 	#ifdef CONFIG_SM_LISTENER
         esb_stop_rx();
         LOG_DBG("switch to IDLE mode that allows TX");
@@ -48,6 +54,9 @@ void mesh_post_tx()
 	#ifdef CONFIG_SM_LISTENER
         esb_start_rx();
         LOG_DBG("switch to RX mode");
+	#else
+	esb_disable();
+	esb_enabled = false;
     #endif
 	esb_tx_complete = true;
 }
@@ -259,6 +268,7 @@ int esb_initialize()
 		}
 	#endif
 
+	esb_enabled = true;
 	return 0;
 }
 
