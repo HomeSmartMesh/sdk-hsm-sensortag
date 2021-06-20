@@ -39,11 +39,6 @@ static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
 static uint8_t g_ttl = 2;
 
-void sm_get_uid(char* text)
-{
-	sprintf(text,"%04lX%04lX",(long unsigned int)NRF_FICR->DEVICEID[0],(long unsigned int)NRF_FICR->DEVICEID[1]);
-}
-
 void mesh_pre_tx()
 {
 	if(!esb_enabled)
@@ -156,12 +151,12 @@ void mesh_bcast_data(uint8_t pid,uint8_t * data,uint8_t size)
     mesh_tx_message(&msg);
 }
 //limited to 255
-void mesh_bcast_text(char *text)
+void mesh_bcast_text(const char *text)
 {
     uint8_t size = strlen(text);
     if(size>MAX_MESH_MESSAGE_SIZE)//truncate in case of long message
     {
-        text[MAX_MESH_MESSAGE_SIZE-1] = '>';
+		LOG_ERR("message truncated at %d from %d", size,MAX_MESH_MESSAGE_SIZE);
         size = MAX_MESH_MESSAGE_SIZE;
     }
     mesh_bcast_data(Mesh_Pid_Text,(uint8_t*)text,size);
@@ -278,11 +273,8 @@ int esb_initialize()
 	return 0;
 }
 
-void sm_start(mesh_rx_handler_t rx_handler)
+void sm_start()
 {
-
-    m_app_rx_handler = rx_handler;
-
 	int err;
 	err = clocks_start();
 	if (err) {
@@ -295,6 +287,11 @@ void sm_start(mesh_rx_handler_t rx_handler)
 		return;
 	}
 	LOG_INF("sm_start initialization complete");
+}
+
+void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler)
+{
+    m_app_rx_handler = rx_handler;
 }
 
 void simplemesh_thread()

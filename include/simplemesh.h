@@ -1,8 +1,13 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
+#include <string>
+//https://nlohmann.github.io/json/
+#include <json.hpp>
+using json = nlohmann::json;
 extern "C" {
 #endif
+
 
 #define MESH_Broadcast_Header_Length 4
 #define MESH_P2P_Header_Length 5
@@ -34,10 +39,18 @@ typedef struct
 
 typedef void (*mesh_rx_handler_t)(message_t*);
 
-void sm_start(mesh_rx_handler_t rx_handler);
-void sm_get_uid(char* text);
-void mesh_bcast_text(char *text);
+void sm_start();
+void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler);
+void mesh_bcast_text(const char *text);
 
+//------------------------- CPP wrapper interfaces -------------------------
 #ifdef __cplusplus
-}
+typedef void (*mesh_rx_json_handler_t)(std::string &topic, json &data);
+std::string sm_get_uid();
+std::string sm_get_topic();
+bool is_self(std::string &payload);
+void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler);
+void mesh_bcast_string(std::string text);
+
+}/*closing of extern "C" {*/
 #endif
