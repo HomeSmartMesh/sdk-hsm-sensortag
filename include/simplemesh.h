@@ -51,6 +51,7 @@ std::string sm_get_topic();
 bool is_self(std::string &payload);
 void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler);
 void mesh_bcast_string(std::string text);
+void mesh_bcast_json(json &data);
 
 }/*closing of extern "C" {*/
 #endif

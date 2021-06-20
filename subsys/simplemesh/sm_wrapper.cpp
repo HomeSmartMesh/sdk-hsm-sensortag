@@ -49,3 +49,9 @@ void mesh_bcast_string(std::string text)
 {
 	mesh_bcast_text(text.c_str());
 }
+
+void mesh_bcast_json(json &data)
+{
+	std::string message = self_topic + data.dump();
+	mesh_bcast_text(message.c_str());
+}

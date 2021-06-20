@@ -31,7 +31,8 @@ void main(void)
 
 	uid = sm_get_uid();
 	full_topic = sm_get_topic();
-	printk("Hello Simple from DWM1001 UID (%s)",uid.c_str());
+	printk("Hello Simple Mesh from DWM1001 UID (%s)\n",uid.c_str());
+	printk("broadcasting on self topic (%s)\n",full_topic.c_str());
 
 	sm_set_callback_rx_json(rx_topic_json_handler);
 	sm_start();
@@ -39,9 +40,8 @@ void main(void)
 	int loop = 0;
 	while (1) {
 		j["alive"] = loop;
-		std::string message = full_topic + j.dump();
-		mesh_bcast_string(message);
-		printk("%s\n",message.c_str());
+		mesh_bcast_json(j);
+		printk("broadcasted : %s\n",j.dump().c_str());
 		k_sleep(K_SECONDS(5));
 		loop++;
 	}
