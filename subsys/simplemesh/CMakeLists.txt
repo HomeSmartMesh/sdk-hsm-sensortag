@@ -1,5 +1,5 @@
 zephyr_library()
-zephyr_library_sources_ifdef(CONFIG_SIMPLEMESH simplemesh.c)
 if(CONFIG_CPLUSPLUS)
+    zephyr_library_sources_ifdef(CONFIG_SIMPLEMESH simplemesh.cpp)
     zephyr_library_sources_ifdef(CONFIG_SIMPLEMESH sm_wrapper.cpp)
 endif()

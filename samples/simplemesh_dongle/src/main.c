@@ -65,7 +65,6 @@ void main(void)
 		char message[50];
 		sprintf(message,"sm/%s{\"alive\":%d}",uid,loop);
 		mesh_bcast_text(message);
-		safe_print(message);
 		k_sleep(K_SECONDS(20));
 		loop++;
 	}
