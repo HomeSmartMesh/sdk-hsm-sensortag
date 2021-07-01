@@ -31,6 +31,7 @@ manifest:
           - nrf_hw_models
           - openthread
           - segger
+          - tinycrypt
 
     - name: pcb
       repo-path: nrf52_thread_sensortag
