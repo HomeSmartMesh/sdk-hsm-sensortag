@@ -3,8 +3,11 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include <drivers/clock_control.h>
-#include <drivers/clock_control/nrf_clock_control.h>
+extern "C"{
+	#include <drivers/clock_control.h>
+	#include <drivers/clock_control/nrf_clock_control.h>
+}
+
 #include <irq.h>
 #include <logging/log.h>
 #include <nrf.h>
@@ -26,8 +29,9 @@ uint8_t rx_file_buffer[MAX_MESH_FILE_SIZE];
 uint8_t tx_file_buffer[MAX_MESH_FILE_SIZE];
 
 int esb_initialize();
-void simplemesh_thread();
-void mesh_send_data(uint8_t pid,uint8_t dest,uint8_t * data,uint8_t size);
+void simplemesh_rx_thread();
+void simplemesh_tx_thread();
+void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size);
 
 K_SEM_DEFINE(sem_rx, 0, 1);
 K_THREAD_DEFINE(sm_receiver, STACKSIZE, simplemesh_rx_thread, 
@@ -75,7 +79,7 @@ void mesh_post_tx()
 }
 
 //this is completing the payload with an offset to avoid compying on a new buffer
-void mesh_buffer_2_esb_payload(uin8_t *buffer,uint8_t offset,uint8_t size, struct esb_payload *p_tx_payload)
+void mesh_buffer_2_esb_payload(uint8_t *buffer,uint8_t offset,uint8_t size, struct esb_payload *p_tx_payload)
 {
     memcpy( p_tx_payload->data+sm::p2p_header_length + offset,buffer,size);
 }
@@ -153,15 +157,15 @@ void mesh_tx_message(message_t* p_msg)
 }
 
 //limited to 255
-void mesh_bcast_data(uint8_t pid,uint8_t * data,uint8_t size)
+void mesh_bcast_data(sm::pid pid,uint8_t * data,uint8_t size)
 {
     message_t msg;
-	if(size > MAX_MESH_MESSAGE_SIZE)
+	if(size > sm::max_msg_size)
 	{
 		return;
 	}
     msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
-    msg.pid     = pid;
+    msg.pid     = (uint8_t)pid;
     msg.source  = 0xFF;//TODO config node id
     msg.payload = data;
     msg.payload_length = size;
@@ -172,12 +176,12 @@ void mesh_bcast_data(uint8_t pid,uint8_t * data,uint8_t size)
 void mesh_bcast_text(const char *text)
 {
     uint8_t size = strlen(text);
-    if(size>MAX_MESH_MESSAGE_SIZE)//truncate in case of long message
+    if(size>sm::max_msg_size)//truncate in case of long message
     {
-		LOG_ERR("message truncated at %d from %d", size,MAX_MESH_MESSAGE_SIZE);
-        size = MAX_MESH_MESSAGE_SIZE;
+		LOG_ERR("message truncated at %d from %d", size,sm::max_msg_size);
+        size = sm::max_msg_size;
     }
-    mesh_bcast_data(Mesh_Pid_Text,(uint8_t*)text,size);
+    mesh_bcast_data(sm::pid::text,(uint8_t*)text,size);
 }
 
 int clocks_start(void)
@@ -320,7 +324,7 @@ void simplemesh_rx_thread()
 		while(esb_read_rx_payload(&rx_payload) == 0)
 		{
 			mesh_esb_2_message_payload(&rx_payload,&rx_msg);
-			if((rx_msg.pid >= sm::pid::file_info) && (rx_msg.pid <= sm::pid::file_status))
+			if((rx_msg.pid >= (uint8_t)(sm::pid::file_info)) && (rx_msg.pid <= (uint8_t)(sm::pid::file_status)))
 			{
 				k_sem_give(&sem_file_tx);
 			}
@@ -328,7 +332,7 @@ void simplemesh_rx_thread()
 			{
 				m_app_rx_handler(&rx_msg);
 			}
-			else if(rx_msg.pid == sm::pid::text)
+			else if(rx_msg.pid == (uint8_t)(sm::pid::text))
 			{
 				printk("%s\n",(char*)rx_msg.payload);
 			}
@@ -349,52 +353,68 @@ void simplemesh_tx_thread()
 	}
 }
 
-void mesh_tx_file_wait_for(uint8_t pid)
+void mesh_tx_file_wait_for(sm::pid pid)
 {
-	k_sem_take(&sem_file_tx, 50);//timeout 50 ms
-	if(rx_msg.pid != pid){
+	k_sem_take(&sem_file_tx, K_MSEC(50));//timeout 50 ms
+	if(rx_msg.pid != (uint8_t)(pid)){
 		LOG_ERR("mesh_tx_file> File tx unexpected pid %d instead of file_info",rx_msg.pid);
 		return;
 	}
 }
 
-void mesh_tx_file(uint8_t pid,uint8_t dest,uint8_t * data,uint8_t size)
+uint16_t last_seq_size;
+sm::file::info_t send_file_info(uint8_t pid,uint8_t dest,uint8_t size)
 {
-	//send file info----------------------------------------------------------
 	sm::file::info_t info_msg;
 	info_msg.pid = pid;
-	info_msg.seq_size = MAX_MESH_MESSAGE_SIZE;
-	info_msg.nb_seq   = (size / seq_size);
+	info_msg.seq_size = sm::max_msg_size;
+	info_msg.nb_seq   = (size / info_msg.seq_size);
 	info_msg.crc = 0;
-	uin16_t last_seq_size = MAX_MESH_MESSAGE_SIZE;
-	if((size % seq_size) != 0){
-		nb_seq++;
-		last_seq_size = size % seq_size;
+	last_seq_size = sm::max_msg_size;
+	if((size % info_msg.seq_size) != 0){
+		info_msg.nb_seq++;
+		last_seq_size = size % info_msg.seq_size;
 	}
     message_t msg;
 	msg.control = sm::control::msg_needs_ack | 1;//Peer to peer with 1 time to live
-	msg.pid = sm::pid::file_info;
+	msg.pid = (uint8_t)(sm::pid::file_info);
 	msg.source = 0xFF;//TODO
 	msg.dest = dest;
-	msg.payload = static_cast<uint8_t*>(&info_msg);
-	msg.payload_length = size_of(sm::file::info_t);
+	msg.payload = (uint8_t*)(&info_msg);
+	msg.payload_length = sizeof(sm::file::info_t);
 	mesh_tx_message(&msg);
-	//wait for file info response---------------------------------------------
-	mesh_tx_file_wait_for(sm::pid::file_info);
-	//send file sequence in a for loop----------------------------------------
+	return info_msg;
+}
+
+void send_file_status_request(uint8_t dest)
+{
+    message_t msg;
+	msg.control = sm::control::msg_req | 1;//Peer to peer with 1 time to live
+	msg.pid = (uint8_t)(sm::pid::file_status);
+	msg.source = 0xFF;//TODO
+	msg.dest = dest;
+	msg.payload = nullptr;
+	msg.payload_length = 0;
+	mesh_tx_message(&msg);
+	return;
+}
+
+void send_file_sequence(uint8_t dest, uint16_t start,uint16_t stop,sm::file::info_t &info_msg,uint8_t* data)
+{
 	uint32_t offset = 0;
-	for(uint16_t i=0;i<info_msg.nb_seq;i++){
+	for(uint16_t i=start;i<stop;i++){
 		sm::file::sequence_header_t seq_header;
 		seq_header.seq_id = i;
 		seq_header.offset = offset;
 		offset+=info_msg.seq_size;
 
-		msg.control = msg_no_ack | 1;//Peer to peer with 1 time to live
-		msg.pid = sm::pid::file_sequence;
+	    message_t msg;
+		msg.control = sm::control::msg_no_ack | 1;//Peer to peer with 1 time to live
+		msg.pid = (uint8_t)(sm::pid::file_sequence);
 		msg.source = 0xFF;//TODO
 		msg.dest = dest;
 		msg.payload = tx_file_buffer;
-		uin16_t seq_size = MAX_MESH_MESSAGE_SIZE;
+		uint16_t seq_size = sm::max_msg_size;
 		if(i == info_msg.nb_seq-1){
 			seq_size = last_seq_size;
 		}
@@ -406,23 +426,36 @@ void mesh_tx_file(uint8_t pid,uint8_t dest,uint8_t * data,uint8_t size)
 		mesh_tx_message(&msg);
 		k_sleep(K_MSEC(1));
 	}
+}
 
-	//send file status request
-	//wait for file status request on a while loop until the status is clear otherwise re-send missing block
+void mesh_tx_file(uint8_t pid,uint8_t dest,uint8_t * data,uint8_t size)
+{
+	sm::file::info_t info_msg = send_file_info(pid,dest,size);
+
+	mesh_tx_file_wait_for(sm::pid::file_info);
+
+	send_file_sequence(dest,0,info_msg.nb_seq-1,info_msg,data);
+
+	bool needs_transmission = true;
+	do{
+		send_file_status_request(dest);
+		mesh_tx_file_wait_for(sm::pid::file_status);
+		//if retransmission needed loop back
+	}while(needs_transmission);
 }
 
 //unlimited size, handles packets segmentation
-void mesh_send_data(uint8_t pid,uint8_t dest,uint8_t * data,uint8_t size)
+void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size)
 {
     message_t msg;
-	if(size <= MAX_MESH_MESSAGE_SIZE){
+	if(size <= sm::max_msg_size){
 		msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
-		msg.pid     = pid;
+		msg.pid     = (uint8_t)(pid);
 		msg.source  = 0xFF;//TODO config node id
 		msg.payload = data;
 		msg.payload_length = size;
 		mesh_tx_message(&msg);
 	}else{
-		mesh_tx_file(pid,dest,data,size);
+		mesh_tx_file((uint8_t)pid,dest,data,size);
 	}
 }

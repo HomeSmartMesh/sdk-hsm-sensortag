@@ -25,7 +25,7 @@ bool is_self(std::string &payload)
 
 void mesh_rx_handler(message_t* msg)
 {
-	if(msg->pid == Mesh_Pid_Text){
+	if(msg->pid == (uint8_t)(sm::pid::text)){
 		msg->payload[msg->payload_length] = '\0';
 		std::string payload = (char*)msg->payload;
 		if(is_self(payload)){
@@ -59,5 +59,5 @@ void mesh_bcast_json(json &data)
 void mesh_send_json(json &data,uint8_t node_id)
 {
 	std::string message = self_topic + data.dump();
-	mesh_send_data(sm::pid::text,node_id,message.c_str(),message.length());
+	mesh_send_data(sm::pid::text,(uint8_t)node_id,(uint8_t*)message.c_str(),message.length());
 }

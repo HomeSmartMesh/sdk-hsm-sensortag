@@ -29,7 +29,7 @@ namespace sm
         file_info       =  0x20,//request with ack
         file_sequence   =  0x21,
         file_status     =  0x22//pid only is request, response comes with struct
-    }
+    };
     namespace file
     {
         typedef struct 
@@ -92,6 +92,7 @@ void mesh_bcast_string(std::string text);
 void mesh_bcast_json(json &data);
 
 void mesh_send_json(json &data,uint8_t node_id);
+void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size);
 
 }/*closing of extern "C" {*/
 #endif /*__cplusplus*/
