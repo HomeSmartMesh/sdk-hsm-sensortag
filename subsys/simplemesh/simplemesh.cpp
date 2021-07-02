@@ -336,6 +336,11 @@ void simplemesh_rx_thread()
 			{
 				printk("%s\n",(char*)rx_msg.payload);
 			}
+			else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
+			{
+				std::string message((char*)rx_msg.payload,rx_msg.payload_length);
+				printk("%s:node_id_get\n",message.c_str());
+			}
 			else
 			{
 				LOG_INF("RX> source:%d , pid:0x%02X , length:%d",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
@@ -458,4 +463,17 @@ void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size)
 	}else{
 		mesh_tx_file((uint8_t)pid,dest,data,size);
 	}
+}
+
+uint8_t mesh_request_node_id()
+{
+    message_t msg;
+	msg.control = sm::control::msg_no_ack | 1;//Peer to peer with 1 time to live
+	msg.pid = (uint8_t)(sm::pid::node_id_get);
+	msg.source = 0xFF;
+	msg.dest = 0;
+	std::string uid = sm_get_uid();
+	msg.payload = (uint8_t*)uid.c_str();
+	msg.payload_length = uid.length();
+	mesh_tx_message(&msg);
 }
