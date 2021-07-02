@@ -56,8 +56,8 @@ void mesh_bcast_json(json &data)
 	mesh_bcast_text(message.c_str());
 }
 
-void mesh_send_json(json &data,uint8_t node_id)
+void mesh_send_json(uint8_t dest_id, json &data)
 {
 	std::string message = self_topic + data.dump();
-	mesh_send_data(sm::pid::text,(uint8_t)node_id,(uint8_t*)message.c_str(),message.length());
+	mesh_send_text(dest_id,message);
 }

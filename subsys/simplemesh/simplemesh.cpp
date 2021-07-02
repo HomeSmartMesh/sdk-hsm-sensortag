@@ -30,18 +30,17 @@ uint8_t tx_file_buffer[MAX_MESH_FILE_SIZE];
 
 int esb_initialize();
 void simplemesh_rx_thread();
-void simplemesh_tx_thread();
 void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size);
+uint8_t mesh_assign_short_id(std::string &longid);
+void mesh_set_node_id(std::string &longid, uint8_t shortid);
+bool mesh_request_node_id();
 
 K_SEM_DEFINE(sem_rx, 0, 1);
 K_THREAD_DEFINE(sm_receiver, STACKSIZE, simplemesh_rx_thread, 
                 NULL, NULL, NULL, RX_PRIORITY, 0, 0);
 
-K_SEM_DEFINE(sem_file_tx, 0, 1);
-K_SEM_DEFINE(sem_tx, 0, 1);
-K_THREAD_DEFINE(sm_transmitter, STACKSIZE, simplemesh_tx_thread, 
-                NULL, NULL, NULL, TX_PRIORITY, 0, 0);
-
+K_SEM_DEFINE(sem_id_set, 0, 1);
+K_SEM_DEFINE(sem_ack, 0, 1);
 
 static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
@@ -53,6 +52,12 @@ static volatile bool esb_enabled = false;
 static volatile bool esb_completed = false;
 static volatile bool esb_tx_complete = false;
 static uint8_t g_ttl = 2;
+static uint8_t g_node_id = 0xff;
+static uint8_t g_node_is_router = false;
+static uint8_t g_retries = 3;
+static uint8_t g_coordinator = true;
+
+std::map<std::string,uint8_t> nodes_ids;
 
 void mesh_pre_tx()
 {
@@ -156,6 +161,19 @@ void mesh_tx_message(message_t* p_msg)
     
 }
 
+void mesh_tx_ack(message_t& msg, uint8_t ttl)
+{
+    message_t ack;
+    ack.control = sm::control::ack | ttl;
+    ack.pid     = msg.pid;
+    ack.source  = msg.dest;
+    ack.dest    = msg.source;
+    ack.payload = nullptr;
+    ack.payload_length = 0;
+
+    mesh_tx_message(&ack);
+}
+
 //limited to 255
 void mesh_bcast_data(sm::pid pid,uint8_t * data,uint8_t size)
 {
@@ -164,9 +182,9 @@ void mesh_bcast_data(sm::pid pid,uint8_t * data,uint8_t size)
 	{
 		return;
 	}
-    msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
+    msg.control = sm::control::broadcast | g_ttl;
     msg.pid     = (uint8_t)pid;
-    msg.source  = 0xFF;//TODO config node id
+    msg.source  = g_node_id;
     msg.payload = data;
     msg.payload_length = size;
 
@@ -182,6 +200,48 @@ void mesh_bcast_text(const char *text)
         size = sm::max_msg_size;
     }
     mesh_bcast_data(sm::pid::text,(uint8_t*)text,size);
+}
+
+bool mesh_send_data_ack(sm::pid pid,uint8_t dest, uint8_t* data, uint8_t size)
+{
+    message_t msg;
+	if(size > sm::max_msg_size)
+	{
+		return false;
+	}
+    msg.control = sm::control::msg_needs_ack | g_ttl;
+    msg.pid     = (uint8_t)pid;
+    msg.source  = g_node_id;
+    msg.dest  = dest;
+    msg.payload = data;
+    msg.payload_length = size;
+
+	bool success = false;
+	for(uint8_t i=0;i<g_retries;i++){
+		mesh_tx_message(&msg);
+		if(k_sem_take(&sem_ack,K_MSEC(50)) == 0){
+			success = true;
+			continue;
+		}
+	}
+
+	return success;
+}
+
+void take_node_id()
+{
+	std::string uid = sm_get_uid();
+	uint8_t len_node_id = uid.length();
+	if(rx_msg.payload_length != len_node_id+3){
+		return;
+	}
+	std::string this_node_id_str((char*)rx_msg.payload,len_node_id);
+	if(this_node_id_str.compare(uid) != 0){
+		return;
+	}
+
+	sscanf((char*)(rx_msg.payload+len_node_id+1),"%2hhx",&g_node_id);
+	k_sem_give(&sem_id_set);
 }
 
 int clocks_start(void)
@@ -239,7 +299,6 @@ void event_handler(struct esb_evt const *event)
 	}
 	esb_completed = true;
 }
-
 
 int esb_initialize()
 {
@@ -309,11 +368,60 @@ void sm_start()
 		return;
 	}
 	LOG_INF("sm_start initialization complete");
+	
+	if(g_coordinator){
+		if(mesh_send_data_ack(sm::pid::ping,0,nullptr,0)){//if there is another coordinator
+			g_coordinator = false;
+		}else{// I'm coordinator now
+			std::string uid = sm_get_uid();
+			g_node_id = 0;
+			nodes_ids[uid] = g_node_id;
+			printk("sm_start> '%s' acting as coordinator with short id 0\n",uid.c_str());
+		}
+	}
+	if(!g_coordinator){
+		if(mesh_request_node_id()){//with retries
+			if(k_sem_take(&sem_id_set,K_MSEC(50)) == 0){
+				printk("sm_start> obtained node id : %d\n",g_node_id);
+			}else{
+				printk("sm_start> waiting for node id set timedout\n");
+			}
+		}else{
+			printk("sm_start> mesh_request_node_id() failed\n");
+		}
+	}
+
 }
 
 void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler)
 {
     m_app_rx_handler = rx_handler;
+}
+
+void mesh_rx_handler(message_t &msg)
+{
+    if(msg.dest == g_node_id)
+    {
+        if(MESH_WANT_ACKNOWLEDGE(msg.control)){
+            mesh_tx_ack(msg,g_ttl);
+        }
+        else if(MESH_IS_ACKNOWLEDGE(msg.control)){
+            k_sem_give(&sem_ack);
+        }else if(msg.pid == (uint8_t)sm::pid::node_id_set){
+			take_node_id();
+        }else if(msg.pid == (uint8_t)sm::pid::node_id_get){
+			if(g_coordinator){
+				std::string longid((char*)rx_msg.payload,rx_msg.payload_length);
+				uint8_t newid = mesh_assign_short_id(longid);
+				mesh_set_node_id(longid,newid);
+			}
+		}
+    }
+    //only re-route messaegs directed to other than the current node itself
+    else if(g_node_is_router)
+    {
+        //mesh_forward_message(msg);//a mesh forward is destructive, to be done at last step
+    }
 }
 
 void simplemesh_rx_thread()
@@ -324,156 +432,94 @@ void simplemesh_rx_thread()
 		while(esb_read_rx_payload(&rx_payload) == 0)
 		{
 			mesh_esb_2_message_payload(&rx_payload,&rx_msg);
-			if((rx_msg.pid >= (uint8_t)(sm::pid::file_info)) && (rx_msg.pid <= (uint8_t)(sm::pid::file_status)))
-			{
-				k_sem_give(&sem_file_tx);
-			}
-			else if(m_app_rx_handler != NULL)
+			//-------------App-------------
+			if(m_app_rx_handler != NULL)//app can sniff or create a custom dongle
 			{
 				m_app_rx_handler(&rx_msg);
 			}
+			//-------------Dongle-------------
 			else if(rx_msg.pid == (uint8_t)(sm::pid::text))
 			{
 				printk("%s\n",(char*)rx_msg.payload);
 			}
-			else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
-			{
-				std::string message((char*)rx_msg.payload,rx_msg.payload_length);
-				printk("%s:node_id_get\n",message.c_str());
-			}
 			else
 			{
-				LOG_INF("RX> source:%d , pid:0x%02X , length:%d",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+				printk("%d:{\"pid\":0x%02X,\"length\":%d}",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
 			}
+			//-------------Routing-------------
+			mesh_rx_handler(rx_msg);
 		}
 	}
 }
 
-void simplemesh_tx_thread()
-{
-	while(true)
-	{
-		k_sem_take(&sem_tx, K_FOREVER);
-
-	}
-}
-
-void mesh_tx_file_wait_for(sm::pid pid)
-{
-	k_sem_take(&sem_file_tx, K_MSEC(50));//timeout 50 ms
-	if(rx_msg.pid != (uint8_t)(pid)){
-		LOG_ERR("mesh_tx_file> File tx unexpected pid %d instead of file_info",rx_msg.pid);
-		return;
-	}
-}
-
-uint16_t last_seq_size;
-sm::file::info_t send_file_info(uint8_t pid,uint8_t dest,uint8_t size)
-{
-	sm::file::info_t info_msg;
-	info_msg.pid = pid;
-	info_msg.seq_size = sm::max_msg_size;
-	info_msg.nb_seq   = (size / info_msg.seq_size);
-	info_msg.crc = 0;
-	last_seq_size = sm::max_msg_size;
-	if((size % info_msg.seq_size) != 0){
-		info_msg.nb_seq++;
-		last_seq_size = size % info_msg.seq_size;
-	}
-    message_t msg;
-	msg.control = sm::control::msg_needs_ack | 1;//Peer to peer with 1 time to live
-	msg.pid = (uint8_t)(sm::pid::file_info);
-	msg.source = 0xFF;//TODO
-	msg.dest = dest;
-	msg.payload = (uint8_t*)(&info_msg);
-	msg.payload_length = sizeof(sm::file::info_t);
-	mesh_tx_message(&msg);
-	return info_msg;
-}
-
-void send_file_status_request(uint8_t dest)
+void mesh_send_packet(sm::pid pid,uint8_t dest,uint8_t * data,uint32_t size)
 {
     message_t msg;
-	msg.control = sm::control::msg_req | 1;//Peer to peer with 1 time to live
-	msg.pid = (uint8_t)(sm::pid::file_status);
-	msg.source = 0xFF;//TODO
-	msg.dest = dest;
-	msg.payload = nullptr;
-	msg.payload_length = 0;
+	msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
+	msg.pid     = (uint8_t)(pid);
+	msg.source  = 0xFF;//TODO config node id
+	msg.payload = data;
+	msg.payload_length = size;
 	mesh_tx_message(&msg);
-	return;
 }
 
-void send_file_sequence(uint8_t dest, uint16_t start,uint16_t stop,sm::file::info_t &info_msg,uint8_t* data)
+//blocking unlimited size
+void mesh_send_text(uint8_t dest,std::string &text)
 {
-	uint32_t offset = 0;
-	for(uint16_t i=start;i<stop;i++){
-		sm::file::sequence_header_t seq_header;
-		seq_header.seq_id = i;
-		seq_header.offset = offset;
-		offset+=info_msg.seq_size;
+	uint8_t* data = (uint8_t*)text.c_str();
+	uint32_t size = text.length();
+	uint8_t seq_size = sm::max_msg_size;
+	uint32_t nb_seq   = (size / seq_size);
+	uint8_t last_seq_size = sm::max_msg_size;
+	if((size % seq_size) != 0){
+		nb_seq++;
+		last_seq_size = size % seq_size;
+	}
 
-	    message_t msg;
-		msg.control = sm::control::msg_no_ack | 1;//Peer to peer with 1 time to live
-		msg.pid = (uint8_t)(sm::pid::file_sequence);
-		msg.source = 0xFF;//TODO
-		msg.dest = dest;
-		msg.payload = tx_file_buffer;
-		uint16_t seq_size = sm::max_msg_size;
-		if(i == info_msg.nb_seq-1){
+	for(uint32_t i=0;i<nb_seq;i++){
+		if(i == nb_seq-1){//if last
 			seq_size = last_seq_size;
 		}
-		const uint8_t header_size = sizeof(sm::file::sequence_header_t);
-		msg.payload_length = header_size + seq_size;
-		memcpy(tx_file_buffer,&seq_header,header_size);
-		memcpy(tx_file_buffer+header_size,data,seq_size);
-		data+=seq_size;
-		mesh_tx_message(&msg);
-		k_sleep(K_MSEC(1));
+		if(!mesh_send_data_ack(sm::pid::text,dest,data,seq_size)){
+			LOG_ERR("mesh_tx_file_ack() failed");
+			continue;
+		}
+		if(i != nb_seq-1){//if not lat
+			data += seq_size;
+		}
 	}
 }
 
-void mesh_tx_file(uint8_t pid,uint8_t dest,uint8_t * data,uint8_t size)
+//a node id is needed before it's possible to send and receive directed messages
+bool mesh_request_node_id()
 {
-	sm::file::info_t info_msg = send_file_info(pid,dest,size);
-
-	mesh_tx_file_wait_for(sm::pid::file_info);
-
-	send_file_sequence(dest,0,info_msg.nb_seq-1,info_msg,data);
-
-	bool needs_transmission = true;
-	do{
-		send_file_status_request(dest);
-		mesh_tx_file_wait_for(sm::pid::file_status);
-		//if retransmission needed loop back
-	}while(needs_transmission);
-}
-
-//unlimited size, handles packets segmentation
-void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size)
-{
-    message_t msg;
-	if(size <= sm::max_msg_size){
-		msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
-		msg.pid     = (uint8_t)(pid);
-		msg.source  = 0xFF;//TODO config node id
-		msg.payload = data;
-		msg.payload_length = size;
-		mesh_tx_message(&msg);
-	}else{
-		mesh_tx_file((uint8_t)pid,dest,data,size);
-	}
-}
-
-uint8_t mesh_request_node_id()
-{
-    message_t msg;
-	msg.control = sm::control::msg_no_ack | 1;//Peer to peer with 1 time to live
-	msg.pid = (uint8_t)(sm::pid::node_id_get);
-	msg.source = 0xFF;
-	msg.dest = 0;
 	std::string uid = sm_get_uid();
-	msg.payload = (uint8_t*)uid.c_str();
-	msg.payload_length = uid.length();
+	return mesh_send_data_ack(sm::pid::node_id_get,0,(uint8_t*)uid.c_str(),uid.length());
+}
+
+void mesh_set_node_id(std::string &longid, uint8_t shortid)
+{
+    message_t msg;
+	msg.control = sm::control::broadcast | 2;//Peer to peer with 1 time to live
+	msg.pid = (uint8_t)(sm::pid::node_id_set);
+	msg.source = g_node_id;//does not matter
+	std::string uid = sm_get_uid();
+	char shortid_char[3];
+	sprintf(shortid_char,"%02x",shortid);
+	std::string shortid_str(shortid_char,2);
+	std::string response = uid + ":" +shortid_str;
+	msg.payload = (uint8_t*)response.c_str();
+	msg.payload_length = response.length();
 	mesh_tx_message(&msg);
+}
+
+uint8_t mesh_assign_short_id(std::string &longid)
+{
+	if(nodes_ids.find(longid) != nodes_ids.end()){
+		return nodes_ids[longid];
+	}else{
+		uint8_t newid = nodes_ids.size()+1;
+		nodes_ids[longid] = newid;
+		return newid;
+	}
 }

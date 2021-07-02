@@ -17,7 +17,7 @@ namespace sm
     namespace control
     {
         const uint8_t broadcast = 0x80;
-        const uint8_t message   = 0x40;
+        const uint8_t ack       = 0x40;
         const uint8_t msg_req   = 0x20;
         const uint8_t send_ack  = 0x10;
         const uint8_t msg_needs_ack = 0x70;
@@ -25,35 +25,11 @@ namespace sm
     }
 
     enum struct pid: uint8_t {
+        ping            =  0x00,
         node_id_get     =  0x01,//8 chars text
         node_id_set     =  0x02,//2 chars short id
-        file_info       =  0x20,//request with ack
-        file_sequence   =  0x21,
-        file_status     =  0x22//pid only is request, response comes with struct
+        text            =  0x16
     };
-
-    namespace file
-    {
-        typedef struct 
-        {
-            uint8_t pid;
-            uint8_t seq_size;//all but potentially not last
-            uint16_t nb_seq;
-            uint32_t size;//in bytes
-            uint32_t crc;
-        }info_t;//complete message, no payload
-        typedef struct 
-        {
-            uint16_t    seq_id;//starting from 0
-            uint32_t    offset;
-        }sequence_header_t;//rest is payload
-
-        typedef struct 
-        {
-            uint16_t nb_success;
-            uint16_t nb_missing;
-        }status_t;//payload is list of uint16_t missing ids
-    }
 
 }
 
@@ -93,10 +69,8 @@ void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler);
 void mesh_bcast_string(std::string text);
 void mesh_bcast_json(json &data);
 
-void mesh_send_json(json &data,uint8_t node_id);
-void mesh_send_data(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size);
-
-uint8_t mesh_request_node_id();
+void mesh_send_json(uint8_t dest_id, json &data);
+void mesh_send_text(uint8_t dest_id, std::string &text);
 
 }/*closing of extern "C" {*/
 #endif /*__cplusplus*/
