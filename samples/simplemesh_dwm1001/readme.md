@@ -9,7 +9,6 @@ west build -b decawave_dwm1001_dev -- -DCONF_FILE="prj.conf overlay-usb.conf"
 
 west flash
 
-
-west flash --snr 760130125
+west flash --snr 760130093
 west flash --snr 760130128
 ```

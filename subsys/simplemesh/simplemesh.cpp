@@ -18,7 +18,7 @@ extern "C"{
 
 #include "simplemesh.h"
 
-LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
 
 #define STACKSIZE 4096
 #define RX_PRIORITY 90
@@ -45,6 +45,8 @@ K_SEM_DEFINE(sem_ack, 0, 1);
 static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
 static message_t rx_msg;
+static message_t tx_msg;
+static message_t ack;
 
 static mesh_rx_handler_t m_app_rx_handler = NULL;
 
@@ -55,6 +57,8 @@ static uint8_t g_ttl = 2;
 static uint8_t g_node_id = 0xff;
 static uint8_t g_node_is_router = false;
 static uint8_t g_retries = 3;
+static uint16_t g_retries_timeout_ms = 200;
+static uint16_t g_set_id_timeout_ms = 300;
 static uint8_t g_coordinator = true;
 
 std::map<std::string,uint8_t> nodes_ids;
@@ -163,7 +167,6 @@ void mesh_tx_message(message_t* p_msg)
 
 void mesh_tx_ack(message_t& msg, uint8_t ttl)
 {
-    message_t ack;
     ack.control = sm::control::ack | ttl;
     ack.pid     = msg.pid;
     ack.source  = msg.dest;
@@ -177,18 +180,17 @@ void mesh_tx_ack(message_t& msg, uint8_t ttl)
 //limited to 255
 void mesh_bcast_data(sm::pid pid,uint8_t * data,uint8_t size)
 {
-    message_t msg;
 	if(size > sm::max_msg_size)
 	{
 		return;
 	}
-    msg.control = sm::control::broadcast | g_ttl;
-    msg.pid     = (uint8_t)pid;
-    msg.source  = g_node_id;
-    msg.payload = data;
-    msg.payload_length = size;
+    tx_msg.control = sm::control::broadcast | g_ttl;
+    tx_msg.pid     = (uint8_t)pid;
+    tx_msg.source  = g_node_id;
+    tx_msg.payload = data;
+    tx_msg.payload_length = size;
 
-    mesh_tx_message(&msg);
+    mesh_tx_message(&tx_msg);
 }
 //limited to 255
 void mesh_bcast_text(const char *text)
@@ -204,25 +206,26 @@ void mesh_bcast_text(const char *text)
 
 bool mesh_send_data_ack(sm::pid pid,uint8_t dest, uint8_t* data, uint8_t size)
 {
-    message_t msg;
 	if(size > sm::max_msg_size)
 	{
 		return false;
 	}
-    msg.control = sm::control::msg_needs_ack | g_ttl;
-    msg.pid     = (uint8_t)pid;
-    msg.source  = g_node_id;
-    msg.dest  = dest;
-    msg.payload = data;
-    msg.payload_length = size;
+    tx_msg.control = sm::control::msg_needs_ack | g_ttl;
+    tx_msg.pid     = (uint8_t)pid;
+    tx_msg.source  = g_node_id;
+    tx_msg.dest  = dest;
+    tx_msg.payload = data;
+    tx_msg.payload_length = size;
 
 	bool success = false;
 	for(uint8_t i=0;i<g_retries;i++){
-		mesh_tx_message(&msg);
-		if(k_sem_take(&sem_ack,K_MSEC(50)) == 0){
+		mesh_tx_message(&tx_msg);
+		if(k_sem_take(&sem_ack,K_MSEC(g_retries_timeout_ms)) == 0){
+			LOG_DBG("sem_ack obtained");
 			success = true;
 			continue;
 		}
+		LOG_DBG("sem_ack timedout");
 	}
 
 	return success;
@@ -281,16 +284,16 @@ void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
 	case ESB_EVENT_TX_SUCCESS:
-		LOG_DBG("TX SUCCESS EVENT");
+		LOG_DBG("TX SUCCESS pid(%d)",tx_msg.pid);
         mesh_post_tx();
 		break;
 	case ESB_EVENT_TX_FAILED:
-		LOG_DBG("TX FAILED EVENT");
+		LOG_DBG("TX FAILED pid(%d)",tx_msg.pid);
 		(void) esb_flush_tx();
 		mesh_post_tx();
 		break;
 	case ESB_EVENT_RX_RECEIVED:
-		LOG_DBG("RX RECEIVED");
+		LOG_DBG("RX RECEIVED pid(%d)",rx_payload.data[2]);
 		k_sem_give(&sem_rx);
 		break;
 	default:
@@ -380,14 +383,15 @@ void sm_start()
 		}
 	}
 	if(!g_coordinator){
+		LOG_DBG("Non coordinator requesting short id");
 		if(mesh_request_node_id()){//with retries
-			if(k_sem_take(&sem_id_set,K_MSEC(50)) == 0){
+			if(k_sem_take(&sem_id_set,K_MSEC(g_set_id_timeout_ms)) == 0){
 				printk("sm_start> obtained node id : %d\n",g_node_id);
 			}else{
 				printk("sm_start> waiting for node id set timedout\n");
 			}
 		}else{
-			printk("sm_start> mesh_request_node_id() failed\n");
+			printk("sm_start> mesh_request_node_id() failed,not coord, nodeid(%d)\n",g_node_id);
 		}
 	}
 
@@ -402,14 +406,19 @@ void mesh_rx_handler(message_t &msg)
 {
     if(msg.dest == g_node_id)
     {
+		LOG_DBG("dest == self (%d) for pid (%d)",g_node_id,msg.pid);
         if(MESH_WANT_ACKNOWLEDGE(msg.control)){
+			LOG_DBG("sending acknowledge back to (%d)",msg.source);
             mesh_tx_ack(msg,g_ttl);
         }
         else if(MESH_IS_ACKNOWLEDGE(msg.control)){
+			LOG_DBG("acknowledge received from (%d)",msg.source);
             k_sem_give(&sem_ack);
         }else if(msg.pid == (uint8_t)sm::pid::node_id_set){
+			LOG_DBG("received set node it");
 			take_node_id();
         }else if(msg.pid == (uint8_t)sm::pid::node_id_get){
+			LOG_DBG("received get node it");
 			if(g_coordinator){
 				std::string longid((char*)rx_msg.payload,rx_msg.payload_length);
 				uint8_t newid = mesh_assign_short_id(longid);
