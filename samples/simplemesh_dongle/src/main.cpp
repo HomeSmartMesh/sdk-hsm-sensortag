@@ -4,11 +4,11 @@
 #include <usb/usb_device.h>
 #include <console/console.h>
 
-#include "simplemesh.h"
+#include <json.hpp>
+#include <simplemesh.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
-
-char uid[20];
+json j;
 
 #define STACKSIZE 1025
 #define PRIORITY 10
@@ -37,7 +37,7 @@ void console_thread()
 
 void rx_handler(message_t* msg)
 {
-	if(msg->pid == Mesh_Pid_Text){
+	if(msg->pid == (uint8_t)(sm::pid::text)){
 		msg->payload[msg->payload_length] = '\0';
 		safe_print((char*)msg->payload);
 	}
@@ -56,16 +56,18 @@ void main(void)
 	#endif
 
 	k_sleep(K_SECONDS(5));
-	sm_start(rx_handler);
-	sm_get_uid(uid);
-	printk("Hello Simple Mesh Started from UID (%s)",uid);
+	sm_start();
+	sm_set_callback_rx_message(rx_handler);
+	std::string uid = sm_get_uid();
+	printk("Hello Simple Mesh Started from UID [%s]",uid.c_str());
 
+	std::string topic = sm_get_topic();
 	int loop = 0;
 	while (1) {
-		char message[50];
-		sprintf(message,"sm/%s{\"alive\":%d}",uid,loop);
-		mesh_bcast_text(message);
-		k_sleep(K_SECONDS(20));
+		j["alive"] = loop;
+		mesh_bcast_json(j);
+		printk("%s:%s\n",topic.c_str(),j.dump().c_str());
+		k_sleep(K_SECONDS(60));
 		loop++;
 	}
 }
