@@ -62,6 +62,7 @@ void mesh_bcast_text(const char *text);
 //------------------------- CPP wrapper interfaces -------------------------
 
 typedef void (*mesh_rx_json_handler_t)(std::string &topic, json &data);
+uint8_t sm_get_sid();
 std::string sm_get_uid();
 std::string sm_get_topic();
 bool is_self(std::string &payload);

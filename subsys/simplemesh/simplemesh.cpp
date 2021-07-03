@@ -34,7 +34,7 @@ int esb_initialize();
 uint8_t coord_assign_short_id(std::string &longid);
 void mesh_set_node_id(std::string &longid, uint8_t shortid);
 bool mesh_request_node_id();
-void take_node_id();
+uint8_t take_node_id(message_t &msg);
 //----------------------------- -------------------------- -----------------------------
 
 K_SEM_DEFINE(sem_rx, 0, 1);
@@ -292,7 +292,10 @@ void mesh_rx_handler(message_t &msg)
 			}
         }else if(msg.pid == (uint8_t)sm::pid::node_id_set){
 			LOG_DBG("received set node it");
-			take_node_id();
+			g_node_id = take_node_id(msg);//on error no effect with old id
+			json j;
+			j["shortid"] = g_node_id;
+			mesh_bcast_json(j);
         }
 	}
     else if(msg.dest == g_node_id){
@@ -428,6 +431,9 @@ void sm_start()
 			g_node_id = 0;
 			nodes_ids[uid] = g_node_id;
 			printk("sm_start> [%s] acting as coordinator with short id [0]\n",uid.c_str());
+			json j;
+			j["shortid"] = g_node_id;
+			mesh_bcast_json(j);
 		}else{
 			printk("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
 		}
@@ -480,23 +486,25 @@ void mesh_send_text(uint8_t dest,std::string &text)
 	}
 }
 
-void take_node_id()
+uint8_t take_node_id(message_t &msg)
 {
 	std::string uid = sm_get_uid();
 	uint8_t len_node_id = uid.length();
-	if(rx_msg.payload_length != len_node_id+3){
-		LOG_ERR("unexpected set node id length %d instead of %d",rx_msg.payload_length,len_node_id+3);
-		return;
+	if(msg.payload_length != len_node_id+3){
+		LOG_ERR("unexpected set node id length %d instead of %d",msg.payload_length,len_node_id+3);
+		return g_node_id;
 	}
-	std::string this_node_id_str((char*)rx_msg.payload,len_node_id);
+	std::string this_node_id_str((char*)msg.payload,len_node_id);
 	if(this_node_id_str.compare(uid) != 0){
 		LOG_ERR("uid mismatch");
 		printk("uid[%s] received[%s]",uid.c_str(),this_node_id_str.c_str());
-		return;
+		return g_node_id;
 	}
 
-	sscanf((char*)(rx_msg.payload+len_node_id+1),"%2hhx",&g_node_id);
+	uint8_t new_node_id;
+	sscanf((char*)(msg.payload+len_node_id+1),"%2hhx",&new_node_id);
 	k_sem_give(&sem_id_set);
+	return new_node_id;
 }
 
 //a node id is needed before it's possible to send and receive directed messages
@@ -544,11 +552,16 @@ void mesh_set_node_id(std::string &longid, uint8_t shortid)
 
 uint8_t coord_assign_short_id(std::string &longid)
 {
-	if(nodes_ids.find(longid) != nodes_ids.end()){
+	if(nodes_ids.find(longid) != nodes_ids.end()){//remote node restart proof, keeps same id
 		return nodes_ids[longid];
 	}else{
 		uint8_t newid = nodes_ids.size();//((size-1):index+1)
 		nodes_ids[longid] = newid;
 		return newid;
 	}
+}
+
+uint8_t sm_get_sid()
+{
+	return g_node_id;
 }
