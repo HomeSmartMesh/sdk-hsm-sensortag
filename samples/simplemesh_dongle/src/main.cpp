@@ -18,28 +18,13 @@ K_SEM_DEFINE(sem_print, 1, 1);
 K_THREAD_DEFINE(sm_console, STACKSIZE, console_thread, 
                 NULL, NULL, NULL, PRIORITY, 0, 0);
 
-void safe_print(const char * text)
-{
-	k_sem_take(&sem_print, K_FOREVER);
-	printk("%s\n", text);
-	k_sem_give(&sem_print);
-}
-
 void console_thread()
 {
 	console_getline_init();
 	while (1) {
-		printk(">");
+		printf(">");
 		char *text = console_getline();
 		mesh_bcast_text(text);
-	}
-}
-
-void rx_handler(message_t* msg)
-{
-	if(msg->pid == (uint8_t)(sm::pid::text)){
-		msg->payload[msg->payload_length] = '\0';
-		safe_print((char*)msg->payload);
 	}
 }
 
@@ -57,16 +42,15 @@ void main(void)
 
 	k_sleep(K_SECONDS(5));
 	sm_start();
-	sm_set_callback_rx_message(rx_handler);
 	std::string uid = sm_get_uid();
-	printk("Hello Simple Mesh Started from UID [%s]",uid.c_str());
+	printf("main>Hello Simple Mesh Started from UID [%s]",uid.c_str());
 
 	std::string topic = sm_get_topic();
 	int loop = 0;
 	while (1) {
 		j["alive"] = loop;
 		mesh_bcast_json(j);
-		printk("%s:%s\n",topic.c_str(),j.dump().c_str());
+		printf("%s:%s\n",topic.c_str(),j.dump().c_str());
 		k_sleep(K_SECONDS(60));
 		loop++;
 	}

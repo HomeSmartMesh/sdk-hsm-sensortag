@@ -3,24 +3,32 @@
 #include "simplemesh.h"
 
 static mesh_rx_json_handler_t m_app_rx_json_handler = NULL;
-std::string base_topic = "sm/";
+std::string base_topic = "sm";
+std::string broadcast_topic_start = base_topic + "{";
 std::string self_topic;
 
 std::string sm_get_uid()
 {
-	char text[20];
-	sprintf(text,"%08lX%08lX",(long unsigned int)NRF_FICR->DEVICEID[0],(long unsigned int)NRF_FICR->DEVICEID[1]);
-	return std::string(text);
+	char uid_text[20];
+	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
+	long unsigned int id1 = NRF_FICR->DEVICEID[1];
+	sprintf(uid_text,"%08lX%08lX",id0,id1);
+	return std::string(uid_text);
 }
 
 std::string sm_get_topic()
 {
-	return base_topic + sm_get_uid();
+	return base_topic + "/" + sm_get_uid();
 }
 
 bool is_self(std::string &payload)
 {
-	return (payload.rfind(self_topic)!=std::string::npos);
+	return (payload.rfind(self_topic,0) == 0);
+}
+
+bool is_broadcast(std::string &payload)
+{
+	return (payload.rfind(broadcast_topic_start,0) == 0);
 }
 
 void mesh_rx_handler(message_t* msg)
@@ -28,7 +36,7 @@ void mesh_rx_handler(message_t* msg)
 	if(msg->pid == (uint8_t)(sm::pid::text)){
 		msg->payload[msg->payload_length] = '\0';
 		std::string payload = (char*)msg->payload;
-		if(is_self(payload)){
+		if(is_broadcast(payload) || is_self(payload)){
 			size_t json_begin = payload.find("{");
 			std::string topic = payload.substr(0,json_begin);
 			std::string json_body = payload.substr(json_begin);

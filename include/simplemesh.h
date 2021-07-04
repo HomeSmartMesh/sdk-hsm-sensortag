@@ -26,8 +26,8 @@ namespace sm
 
     enum struct pid: uint8_t {
         ping            =  0x00,
-        node_id_get     =  0x01,//(1) [uid: 8 byets in 16 chars text]
-        node_id_set     =  0x02,//(2) [short id: 1 byte in 2 chars text]
+        node_id_get     =  0x01,//(1) ['uid': 8 byets in 16 chars text]
+        node_id_set     =  0x02,//(2) ['uid:shortid' : short id 1 byte in 2 chars text]
         text            =  0x16//(22)
     };
 

@@ -18,7 +18,7 @@ extern "C"{
 
 #include "simplemesh.h"
 
-LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_ERR);
+LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
 
 #define STACKSIZE 4096
 #define RX_PRIORITY 90
@@ -48,7 +48,6 @@ static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
 static message_t rx_msg;
 static message_t tx_msg;
-static message_t ack;
 
 static mesh_rx_handler_t m_app_rx_handler = NULL;
 
@@ -61,8 +60,12 @@ static uint8_t g_node_is_router = false;
 static uint8_t g_retries = 3;
 static uint16_t g_retries_timeout_ms = 200;
 static uint16_t g_set_id_timeout_ms = 300;
-static uint8_t g_coordinator = true;
 
+#if CONFIG_SM_COORDINATOR
+	static uint8_t g_coordinator = true;
+#else
+	static uint8_t g_coordinator = false;
+#endif
 std::map<std::string,uint8_t> nodes_ids;
 
 void mesh_pre_tx()
@@ -144,6 +147,7 @@ void mesh_esb_2_message_payload(struct esb_payload *p_rx_payload,message_t *msg)
     }
 }
 
+//does not copy, must keep context, use tx_msg
 void mesh_tx_message(message_t* p_msg)
 {
     mesh_pre_tx();
@@ -162,14 +166,14 @@ void mesh_tx_message(message_t* p_msg)
 
 void mesh_tx_ack(message_t& msg, uint8_t ttl)
 {
-    ack.control = sm::control::ack | ttl;
-    ack.pid     = msg.pid;
-    ack.source  = msg.dest;
-    ack.dest    = msg.source;
-    ack.payload = nullptr;
-    ack.payload_length = 0;
+    tx_msg.control = sm::control::ack | ttl;
+    tx_msg.pid     = msg.pid;
+    tx_msg.source  = msg.dest;
+    tx_msg.dest    = msg.source;
+    tx_msg.payload = nullptr;
+    tx_msg.payload_length = 0;
 
-    mesh_tx_message(&ack);
+    mesh_tx_message(&tx_msg);
 }
 //limited to 255
 void mesh_bcast_data(sm::pid pid,uint8_t * data,uint8_t size)
@@ -239,8 +243,8 @@ void event_handler(struct esb_evt const *event)
 		(void) esb_flush_tx();
 		mesh_post_tx();
 		break;
-	case ESB_EVENT_RX_RECEIVED:
-		LOG_DBG("RX RECEIVED pid(%d)",rx_payload.data[2]);
+	case ESB_EVENT_RX_RECEIVED://not yet parsed in rx_msg
+		LOG_DBG("RX Event");
 		k_sem_give(&sem_rx);
 		break;
 	default:
@@ -258,6 +262,7 @@ void simplemesh_rx_thread()
 		while(esb_read_rx_payload(&rx_payload) == 0)
 		{
 			mesh_esb_2_message_payload(&rx_payload,&rx_msg);
+			LOG_DBG("RX pid(%u) size(%u)",rx_msg.pid,rx_msg.payload_length);
 			//-------------App-------------
 			if(m_app_rx_handler != NULL)//app can sniff or create a custom dongle
 			{
@@ -266,11 +271,22 @@ void simplemesh_rx_thread()
 			//-------------Dongle-------------
 			else if(rx_msg.pid == (uint8_t)(sm::pid::text))
 			{
-				printk("%s\n",(char*)rx_msg.payload);
+				std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+				printf("%s\n",text.c_str());
+			}
+			else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
+			{
+				std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+				printf("node_id_get:%s\n",text.c_str());
+			}
+			else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_set))
+			{
+				std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+				printf("node_id_set:%s\n",text.c_str());
 			}
 			else
 			{
-				printk("%d:{\"pid\":0x%02X,\"length\":%d}",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+				printf("%d:{\"pid\":0x%02X,\"length\":%d}",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
 			}
 			//-------------Routing-------------
 			mesh_rx_handler(rx_msg);
@@ -419,26 +435,29 @@ void sm_start()
 	}
 	LOG_INF("sm_start initialization complete");
 	
-	LOG_DBG("always start by requesting short id from [0]");
-	if(mesh_request_node_id()){//with broadcast retries and sem waiting for 'set id'
-		if(g_coordinator){
-			g_coordinator = false;//request node id got acknowledged
-			printk("sm_start> no longer coordinator\n");
-		}
-	}else{
-		if(g_coordinator){
-			std::string uid = sm_get_uid();
-			g_node_id = 0;
-			nodes_ids[uid] = g_node_id;
-			printk("sm_start> [%s] acting as coordinator with short id [0]\n",uid.c_str());
-			json j;
-			j["shortid"] = g_node_id;
-			mesh_bcast_json(j);
+	#if CONFIG_SM_SNIFFER
+		LOG_DBG("sniffer does not need a nodeid");
+	#else
+		LOG_DBG("always start by requesting short id from [0]");
+		if(mesh_request_node_id()){//with broadcast retries and sem waiting for 'set id'
+			if(g_coordinator){
+				g_coordinator = false;//request node id got acknowledged
+				printf("sm_start> no longer coordinator\n");
+			}
 		}else{
-			printk("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
+			if(g_coordinator){
+				std::string uid = sm_get_uid();
+				g_node_id = 0;
+				nodes_ids[uid] = g_node_id;
+				printf("sm_start> [%s] acting as coordinator with short id [0]\n",uid.c_str());
+				json j;
+				j["shortid"] = g_node_id;
+				mesh_bcast_json(j);
+			}else{
+				printf("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
+			}
 		}
-	}
-
+	#endif
 }
 
 void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler)
@@ -450,13 +469,12 @@ void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler)
 
 void mesh_send_packet(sm::pid pid,uint8_t dest,uint8_t * data,uint32_t size)
 {
-    message_t msg;
-	msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
-	msg.pid     = (uint8_t)(pid);
-	msg.source  = 0xFF;//TODO config node id
-	msg.payload = data;
-	msg.payload_length = size;
-	mesh_tx_message(&msg);
+	tx_msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
+	tx_msg.pid     = (uint8_t)(pid);
+	tx_msg.source  = 0xFF;//TODO config node id
+	tx_msg.payload = data;
+	tx_msg.payload_length = size;
+	mesh_tx_message(&tx_msg);
 }
 
 //blocking unlimited size
@@ -497,7 +515,7 @@ uint8_t take_node_id(message_t &msg)
 	std::string this_node_id_str((char*)msg.payload,len_node_id);
 	if(this_node_id_str.compare(uid) != 0){
 		LOG_ERR("uid mismatch");
-		printk("uid[%s] received[%s]",uid.c_str(),this_node_id_str.c_str());
+		printf("sm> Error : uid[%s] received[%s]",uid.c_str(),this_node_id_str.c_str());
 		return g_node_id;
 	}
 
@@ -524,7 +542,7 @@ bool mesh_request_node_id()
 	for(uint8_t i=0;i<g_retries;i++){
 		mesh_tx_message(&tx_msg);
 		if(k_sem_take(&sem_id_set,K_MSEC(g_set_id_timeout_ms)) == 0){//result sscanf in g_node_id
-			printk("obtained node id set to [%d]\n",g_node_id);
+			printf("sm> obtained node id set to [%d]\n",g_node_id);
 			return true;
 		}else{
 			LOG_DBG("sem_id_set timeout");
@@ -537,17 +555,17 @@ bool mesh_request_node_id()
 
 void mesh_set_node_id(std::string &longid, uint8_t shortid)
 {
-    message_t msg;
-	msg.control = sm::control::broadcast | 2;//Peer to peer with 1 time to live
-	msg.pid = (uint8_t)(sm::pid::node_id_set);
-	msg.source = g_node_id;//does not matter
+	tx_msg.control = sm::control::broadcast | 2;//Peer to peer with 1 time to live
+	tx_msg.pid = (uint8_t)(sm::pid::node_id_set);
+	tx_msg.source = g_node_id;//does not matter
 	char shortid_char[3];
 	sprintf(shortid_char,"%02x",shortid);
 	std::string shortid_str(shortid_char,2);
 	std::string response = longid + ":" +shortid_str;
-	msg.payload = (uint8_t*)response.c_str();
-	msg.payload_length = response.length();
-	mesh_tx_message(&msg);
+	tx_msg.payload = (uint8_t*)response.c_str();
+	tx_msg.payload_length = response.length();
+	mesh_tx_message(&tx_msg);
+	printf("sm> assigned node id (%u) to [%s]\n",shortid,longid.c_str());
 }
 
 uint8_t coord_assign_short_id(std::string &longid)
