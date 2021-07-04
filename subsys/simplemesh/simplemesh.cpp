@@ -18,7 +18,7 @@ extern "C"{
 
 #include "simplemesh.h"
 
-LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_ERR);
 
 #define STACKSIZE 4096
 #define RX_PRIORITY 90
