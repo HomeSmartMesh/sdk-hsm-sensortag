@@ -73,5 +73,9 @@ void mesh_bcast_json(json &data);
 void mesh_send_json(uint8_t dest_id, json &data);
 void mesh_send_text(uint8_t dest_id, std::string &text);
 
+#ifdef CONFIG_SM_GPIO_DEBUG
+    void sm_gpio_init(const struct device *gpio_dev);
+#endif
+
 }/*closing of extern "C" {*/
 #endif /*__cplusplus*/

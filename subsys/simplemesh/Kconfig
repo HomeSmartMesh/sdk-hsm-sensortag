@@ -31,4 +31,10 @@ config SM_CHANNEL
 	help
 	  The RF Channel (2400 + SM_CHANNEL) MHz
 
+	config SM_GPIO_DEBUG
+		bool "simple mesh gpio debug"
+		default n
+		help
+		Enable gpio debug for simple mesh
+
 endif # SIMPLEMESH

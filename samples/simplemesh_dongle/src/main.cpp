@@ -43,15 +43,10 @@ void main(void)
 	k_sleep(K_SECONDS(5));
 	sm_start();
 	std::string uid = sm_get_uid();
-	printf("main>Hello Simple Mesh Started from UID [%s]",uid.c_str());
+	printf("main>Simple Mesh UID [%s]\n",uid.c_str());
 
 	std::string topic = sm_get_topic();
-	int loop = 0;
-	while (1) {
-		j["alive"] = loop;
-		mesh_bcast_json(j);
-		printf("%s:%s\n",topic.c_str(),j.dump().c_str());
-		k_sleep(K_SECONDS(60));
-		loop++;
-	}
+	j["sniffer"] = "started";
+	mesh_bcast_json(j);
+	printf("%s\n",j.dump().c_str());
 }

@@ -20,8 +20,23 @@ extern "C"{
 
 LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
 
-#define STACKSIZE 4096
-#define RX_PRIORITY 90
+
+#ifdef CONFIG_SM_GPIO_DEBUG
+	#include <drivers/gpio.h>
+
+	const struct device *sm_gpio_dev;
+	//0.625 us per toggle
+	#define APP_SET 	gpio_pin_set(sm_gpio_dev, CONFIG_MP_PIN_APP, 1)
+	#define APP_CLEAR 	gpio_pin_set(sm_gpio_dev, CONFIG_MP_PIN_APP, 0)
+
+	void sm_gpio_init(const struct device *gpio_dev)
+	{
+		sm_gpio_dev = gpio_dev;
+	}
+#else
+	#define APP_SET 	
+	#define APP_CLEAR 	
+#endif
 
 //----------------------------- rx event, thread and handler -----------------------------
 void simplemesh_rx_thread();
@@ -36,8 +51,10 @@ void mesh_set_node_id(std::string &longid, uint8_t shortid);
 bool mesh_request_node_id();
 uint8_t take_node_id(message_t &msg);
 //----------------------------- -------------------------- -----------------------------
+#define STACKSIZE 8192
+#define RX_PRIORITY 20
 
-K_SEM_DEFINE(sem_rx, 0, 1);
+K_SEM_DEFINE(sem_rx, 0, 2);//can be assigned while already given
 K_THREAD_DEFINE(sm_receiver, STACKSIZE, simplemesh_rx_thread, 
                 NULL, NULL, NULL, RX_PRIORITY, 0, 0);
 
@@ -63,8 +80,6 @@ static uint16_t g_set_id_timeout_ms = 300;
 
 #if CONFIG_SM_COORDINATOR
 	static uint8_t g_coordinator = true;
-#else
-	static uint8_t g_coordinator = false;
 #endif
 std::map<std::string,uint8_t> nodes_ids;
 
@@ -235,6 +250,8 @@ void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
 	case ESB_EVENT_TX_SUCCESS:
+		APP_SET;
+		APP_CLEAR;
 		LOG_DBG("TX SUCCESS pid(%d)",tx_msg.pid);
         mesh_post_tx();
 		break;
@@ -244,6 +261,8 @@ void event_handler(struct esb_evt const *event)
 		mesh_post_tx();
 		break;
 	case ESB_EVENT_RX_RECEIVED://not yet parsed in rx_msg
+		APP_SET;
+		APP_CLEAR;
 		LOG_DBG("RX Event");
 		k_sem_give(&sem_rx);
 		break;
@@ -258,38 +277,41 @@ void simplemesh_rx_thread()
 {
 	while(true)
 	{
-		k_sem_take(&sem_rx, K_FOREVER);
-		while(esb_read_rx_payload(&rx_payload) == 0)
-		{
-			mesh_esb_2_message_payload(&rx_payload,&rx_msg);
-			LOG_DBG("RX pid(%u) size(%u)",rx_msg.pid,rx_msg.payload_length);
-			//-------------App-------------
-			if(m_app_rx_handler != NULL)//app can sniff or create a custom dongle
+		if(k_sem_take(&sem_rx,K_MSEC(100)) == 0){
+			while(esb_read_rx_payload(&rx_payload) == 0)
 			{
-				m_app_rx_handler(&rx_msg);
+				APP_SET;
+				mesh_esb_2_message_payload(&rx_payload,&rx_msg);
+				LOG_DBG("RX pid(%u) size(%u)",rx_msg.pid,rx_msg.payload_length);
+				//-------------App-------------
+				if(m_app_rx_handler != NULL)//app gets all
+				{
+					m_app_rx_handler(&rx_msg);
+				}
+				//-------------Dongle-------------
+				else if(rx_msg.pid == (uint8_t)(sm::pid::text))
+				{
+					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+					printf("%s\n",text.c_str());
+				}
+				else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
+				{
+					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+					printf("node_id_get:%s\n",text.c_str());
+				}
+				else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_set))
+				{
+					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+					printf("node_id_set:%s\n",text.c_str());
+				}
+				else
+				{
+					printf("%d:{\"pid\":0x%02X,\"length\":%d}",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+				}
+				//-------------Routing-------------
+				mesh_rx_handler(rx_msg);
+				APP_CLEAR;
 			}
-			//-------------Dongle-------------
-			else if(rx_msg.pid == (uint8_t)(sm::pid::text))
-			{
-				std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-				printf("%s\n",text.c_str());
-			}
-			else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
-			{
-				std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-				printf("node_id_get:%s\n",text.c_str());
-			}
-			else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_set))
-			{
-				std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-				printf("node_id_set:%s\n",text.c_str());
-			}
-			else
-			{
-				printf("%d:{\"pid\":0x%02X,\"length\":%d}",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
-			}
-			//-------------Routing-------------
-			mesh_rx_handler(rx_msg);
 		}
 	}
 }
@@ -298,6 +320,8 @@ void mesh_rx_handler(message_t &msg)
 {
     if(MESH_IS_BROADCAST(msg.control)){
         if(msg.pid == (uint8_t)sm::pid::node_id_get){
+			#ifdef CONFIG_SM_COORDINATOR
+			printf("node_id_get\n");
 			if(g_coordinator){
 				LOG_DBG("coordinator received get node id");
 				std::string longid((char*)rx_msg.payload,rx_msg.payload_length);
@@ -306,12 +330,18 @@ void mesh_rx_handler(message_t &msg)
 			}else{
 				LOG_DBG("get node id ignored, not coordinator");
 			}
+			#endif
         }else if(msg.pid == (uint8_t)sm::pid::node_id_set){
+			#ifdef CONFIG_SM_SNIFFER
+			//ignore as a sniffer
+			#else
 			LOG_DBG("received set node it");
 			g_node_id = take_node_id(msg);//on error no effect with old id
+			k_sem_give(&sem_id_set);//unleash the higher prio waiting for 'g_node_id'
 			json j;
 			j["shortid"] = g_node_id;
 			mesh_bcast_json(j);
+			#endif
         }
 	}
     else if(msg.dest == g_node_id){
@@ -515,13 +545,12 @@ uint8_t take_node_id(message_t &msg)
 	std::string this_node_id_str((char*)msg.payload,len_node_id);
 	if(this_node_id_str.compare(uid) != 0){
 		LOG_ERR("uid mismatch");
-		printf("sm> Error : uid[%s] received[%s]",uid.c_str(),this_node_id_str.c_str());
+		printf("sm> Error : uid[%s] received[%s]\n",uid.c_str(),this_node_id_str.c_str());
 		return g_node_id;
 	}
 
 	uint8_t new_node_id;
 	sscanf((char*)(msg.payload+len_node_id+1),"%2hhx",&new_node_id);
-	k_sem_give(&sem_id_set);
 	return new_node_id;
 }
 
@@ -542,13 +571,13 @@ bool mesh_request_node_id()
 	for(uint8_t i=0;i<g_retries;i++){
 		mesh_tx_message(&tx_msg);
 		if(k_sem_take(&sem_id_set,K_MSEC(g_set_id_timeout_ms)) == 0){//result sscanf in g_node_id
-			printf("sm> obtained node id set to [%d]\n",g_node_id);
+			printf("sm> obtained node id set to [%u]\n",g_node_id);
 			return true;
 		}else{
-			LOG_DBG("sem_id_set timeout");
+			printf("sm> sem_id_set timeout\n");
 		}
 	}
-	LOG_DBG("id request retries out");
+	printf("sm> id request retries out\n");
 
 	return success;
 }
@@ -583,3 +612,4 @@ uint8_t sm_get_sid()
 {
 	return g_node_id;
 }
+
