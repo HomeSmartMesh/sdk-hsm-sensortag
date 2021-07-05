@@ -20,22 +20,21 @@ extern "C"{
 
 LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
 
-
 #ifdef CONFIG_SM_GPIO_DEBUG
 	#include <drivers/gpio.h>
 
 	const struct device *sm_gpio_dev;
 	//0.625 us per toggle
-	#define APP_SET 	gpio_pin_set(sm_gpio_dev, CONFIG_MP_PIN_APP, 1)
-	#define APP_CLEAR 	gpio_pin_set(sm_gpio_dev, CONFIG_MP_PIN_APP, 0)
+	#define PIN_SM_SET 		gpio_pin_set(sm_gpio_dev, CONFIG_SM_PIN_APP, 1)
+	#define PIN_SM_CLEAR 	gpio_pin_set(sm_gpio_dev, CONFIG_SM_PIN_APP, 0)
 
 	void sm_gpio_init(const struct device *gpio_dev)
 	{
 		sm_gpio_dev = gpio_dev;
 	}
 #else
-	#define APP_SET 	
-	#define APP_CLEAR 	
+	#define PIN_SM_SET
+	#define PIN_SM_CLEAR
 #endif
 
 //----------------------------- rx event, thread and handler -----------------------------
@@ -51,7 +50,7 @@ void mesh_set_node_id(std::string &longid, uint8_t shortid);
 bool mesh_request_node_id();
 uint8_t take_node_id(message_t &msg);
 //----------------------------- -------------------------- -----------------------------
-#define STACKSIZE 8192
+#define STACKSIZE 4096
 #define RX_PRIORITY 20
 
 K_SEM_DEFINE(sem_rx, 0, 2);//can be assigned while already given
@@ -250,8 +249,8 @@ void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
 	case ESB_EVENT_TX_SUCCESS:
-		APP_SET;
-		APP_CLEAR;
+		PIN_SM_SET;
+		PIN_SM_CLEAR;
 		LOG_DBG("TX SUCCESS pid(%d)",tx_msg.pid);
         mesh_post_tx();
 		break;
@@ -261,8 +260,8 @@ void event_handler(struct esb_evt const *event)
 		mesh_post_tx();
 		break;
 	case ESB_EVENT_RX_RECEIVED://not yet parsed in rx_msg
-		APP_SET;
-		APP_CLEAR;
+		PIN_SM_SET;
+		PIN_SM_CLEAR;
 		LOG_DBG("RX Event");
 		k_sem_give(&sem_rx);
 		break;
@@ -280,7 +279,7 @@ void simplemesh_rx_thread()
 		if(k_sem_take(&sem_rx,K_MSEC(100)) == 0){
 			while(esb_read_rx_payload(&rx_payload) == 0)
 			{
-				APP_SET;
+				PIN_SM_SET;
 				mesh_esb_2_message_payload(&rx_payload,&rx_msg);
 				LOG_DBG("RX pid(%u) size(%u)",rx_msg.pid,rx_msg.payload_length);
 				//-------------App-------------
@@ -310,7 +309,7 @@ void simplemesh_rx_thread()
 				}
 				//-------------Routing-------------
 				mesh_rx_handler(rx_msg);
-				APP_CLEAR;
+				PIN_SM_CLEAR;
 			}
 		}
 	}

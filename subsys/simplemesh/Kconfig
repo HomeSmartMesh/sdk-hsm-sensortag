@@ -37,4 +37,11 @@ config SM_CHANNEL
 		help
 		Enable gpio debug for simple mesh
 
+	if SM_GPIO_DEBUG
+		config SM_PIN_APP
+			int "gpio debug for simple mesh 2.4GHz radio"
+			default 13
+			help
+			The default used pin is the DWM1001-Dev kit [nRF] P0.13 => M_PIN17 => J7 pin 8
+	endif # SM_GPIO_DEBUG
 endif # SIMPLEMESH
