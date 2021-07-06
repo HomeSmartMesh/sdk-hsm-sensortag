@@ -10,23 +10,6 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 json j;
 
-#define STACKSIZE 1025
-#define PRIORITY 10
-void console_thread();
-
-K_SEM_DEFINE(sem_print, 1, 1);
-K_THREAD_DEFINE(sm_console, STACKSIZE, console_thread, 
-                NULL, NULL, NULL, PRIORITY, 0, 0);
-
-void console_thread()
-{
-	console_getline_init();
-	while (1) {
-		printf(">");
-		char *text = console_getline();
-		mesh_bcast_text(text);
-	}
-}
 
 void main(void)
 {
@@ -41,6 +24,7 @@ void main(void)
 	#endif
 
 	k_sleep(K_SECONDS(5));
+
 	sm_start();
 	std::string uid = sm_get_uid();
 	printf("main>Simple Mesh UID [%s]\n",uid.c_str());
@@ -49,4 +33,11 @@ void main(void)
 	j["sniffer"] = "started";
 	mesh_bcast_json(j);
 	printf("%s\n",j.dump().c_str());
+
+	console_getline_init();
+	while (1) {
+		printf(">");fflush(NULL);
+		char *text = console_getline();
+		mesh_bcast_text(text);
+	}
 }
