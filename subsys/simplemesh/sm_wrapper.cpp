@@ -34,8 +34,7 @@ bool is_broadcast(std::string &payload)
 void mesh_rx_handler(message_t* msg)
 {
 	if(msg->pid == (uint8_t)(sm::pid::text)){
-		msg->payload[msg->payload_length] = '\0';
-		std::string payload = (char*)msg->payload;
+		std::string payload((char*)msg->payload,msg->payload_length);
 		if(is_broadcast(payload) || is_self(payload)){
 			size_t json_begin = payload.find("{");
 			std::string topic = payload.substr(0,json_begin);

@@ -25,8 +25,10 @@ LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
 
 	const struct device *sm_gpio_dev;
 	//0.625 us per toggle
-	#define PIN_SM_SET 		gpio_pin_set(sm_gpio_dev, CONFIG_SM_PIN_APP, 1)
-	#define PIN_SM_CLEAR 	gpio_pin_set(sm_gpio_dev, CONFIG_SM_PIN_APP, 0)
+	//#define PIN_SM_SET 		gpio_pin_set(sm_gpio_dev, CONFIG_SM_PIN_APP, 1)
+	//#define PIN_SM_CLEAR 	gpio_pin_set(sm_gpio_dev, CONFIG_SM_PIN_APP, 0)
+	#define PIN_SM_SET 		(*(int * const)0x50000508) 	= 1<<CONFIG_SM_PIN_APP
+	#define PIN_SM_CLEAR 	(*(int *) 0x5000050C) 		= 1<<CONFIG_SM_PIN_APP
 
 	void sm_gpio_init(const struct device *gpio_dev)
 	{
@@ -64,6 +66,7 @@ static struct esb_payload tx_payload;
 static struct esb_payload rx_payload;
 static message_t rx_msg;
 static message_t tx_msg;
+int64_t rx_timestamp;
 
 static mesh_rx_handler_t m_app_rx_handler = NULL;
 
@@ -261,15 +264,29 @@ void event_handler(struct esb_evt const *event)
 		break;
 	case ESB_EVENT_RX_RECEIVED://not yet parsed in rx_msg
 		PIN_SM_SET;
-		PIN_SM_CLEAR;
+		rx_timestamp = k_uptime_ticks();
 		LOG_DBG("RX Event");
 		k_sem_give(&sem_rx);
+		PIN_SM_CLEAR;
 		break;
 	default:
 		LOG_ERR("ESB Unhandled Event (%d)",event->evt_id);
 		break;
 	}
 	esb_completed = true;
+}
+
+//thread jitter guard
+void sm_rx_delay_ms(int64_t delay)
+{
+	PIN_SM_SET;
+	int64_t target_ticks_delay = rx_timestamp + k_ms_to_ticks_floor64(delay);
+	if(target_ticks_delay < k_uptime_ticks()){
+		int64_t delta = k_uptime_ticks() - target_ticks_delay;
+		printf("sm> /!\\ target_ticks_delay missed by (%d) us\n", (int)k_ticks_to_us_floor64(delta));
+	}
+	while((target_ticks_delay) > k_uptime_ticks());
+	PIN_SM_CLEAR;
 }
 
 void simplemesh_rx_thread()
@@ -279,7 +296,6 @@ void simplemesh_rx_thread()
 		if(k_sem_take(&sem_rx,K_MSEC(100)) == 0){
 			while(esb_read_rx_payload(&rx_payload) == 0)
 			{
-				PIN_SM_SET;
 				mesh_esb_2_message_payload(&rx_payload,&rx_msg);
 				LOG_DBG("RX pid(%u) size(%u)",rx_msg.pid,rx_msg.payload_length);
 				//-------------App-------------
@@ -309,6 +325,8 @@ void simplemesh_rx_thread()
 				}
 				//-------------Routing-------------
 				mesh_rx_handler(rx_msg);
+				PIN_SM_SET;
+				k_sleep(K_USEC(10));
 				PIN_SM_CLEAR;
 			}
 		}
