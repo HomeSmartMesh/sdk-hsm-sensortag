@@ -69,6 +69,7 @@ bool is_self(std::string &payload);
 void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler);
 void mesh_bcast_string(std::string text);
 void mesh_bcast_json(json &data);
+void mesh_bcast_json_to(json &data,std::string &target);
 
 void mesh_send_json(uint8_t dest_id, json &data);
 void mesh_send_text(uint8_t dest_id, std::string &text);
@@ -78,6 +79,8 @@ void mesh_send_text(uint8_t dest_id, std::string &text);
 #endif
 
 void sm_rx_delay_ms(int64_t delay);
+
+void sm_diag(json &data);
 
 }/*closing of extern "C" {*/
 #endif /*__cplusplus*/

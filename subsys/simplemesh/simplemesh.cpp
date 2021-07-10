@@ -52,7 +52,7 @@ void mesh_set_node_id(std::string &longid, uint8_t shortid);
 bool mesh_request_node_id();
 uint8_t take_node_id(message_t &msg);
 //----------------------------- -------------------------- -----------------------------
-#define STACKSIZE 4096
+#define STACKSIZE 8192
 #define RX_PRIORITY 20
 
 K_SEM_DEFINE(sem_rx, 0, 2);//can be assigned while already given
@@ -253,9 +253,9 @@ void event_handler(struct esb_evt const *event)
 	switch (event->evt_id) {
 	case ESB_EVENT_TX_SUCCESS:
 		PIN_SM_SET;
-		PIN_SM_CLEAR;
 		LOG_DBG("TX SUCCESS pid(%d)",tx_msg.pid);
         mesh_post_tx();
+		PIN_SM_CLEAR;
 		break;
 	case ESB_EVENT_TX_FAILED:
 		LOG_DBG("TX FAILED pid(%d)",tx_msg.pid);
@@ -630,3 +630,29 @@ uint8_t sm_get_sid()
 	return g_node_id;
 }
 
+void sm_diag(json &data)
+{
+	std::string rf_diag = data["rf_diag"];
+	if(rf_diag.compare("ping") == 0){
+		json rf_diag_response;
+		rf_diag_response["rf_diag"] = "pong";
+		rf_diag_response["rssi"] = rx_msg.rssi;
+		rf_diag_response["time"] = rx_timestamp;
+		mesh_bcast_json(rf_diag_response);
+		printf("sm> ping -> pong ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
+	}else if(rf_diag.compare("target_ping") == 0){
+		//Forward the request to the target
+		json ping_request;
+		ping_request["rf_diag"] = "ping";
+		std::string target = data["target"];
+		mesh_bcast_json_to(ping_request, target);
+		printf("sm> ping ; target=%s\n",target.c_str());
+		//then repsond for self diag
+		json rf_diag_response;
+		rf_diag_response["rf_diag"] = "pinger";
+		rf_diag_response["rssi"] = rx_msg.rssi;
+		rf_diag_response["time"] = rx_timestamp;
+		mesh_bcast_json(rf_diag_response);
+		printf("sm> pinger ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
+	}
+}
