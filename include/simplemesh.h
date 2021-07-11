@@ -78,7 +78,8 @@ void mesh_send_text(uint8_t dest_id, std::string &text);
     void sm_gpio_init(const struct device *gpio_dev);
 #endif
 
-void sm_rx_delay_ms(int64_t delay);
+int64_t sm_rx_sync_ms(int64_t delay);
+int64_t sm_sync_ms(int64_t start,int64_t delay);
 
 void sm_diag(json &data);
 

@@ -8,15 +8,6 @@ std::string broadcast_topic_start = base_topic + "{";
 std::string self_topic;
 json request;
 
-std::string sm_get_uid()
-{
-	char uid_text[20];
-	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
-	long unsigned int id1 = NRF_FICR->DEVICEID[1];
-	sprintf(uid_text,"%08lX%08lX",id0,id1);
-	return std::string(uid_text);
-}
-
 std::string sm_get_topic()
 {
 	return base_topic + "/" + sm_get_uid();

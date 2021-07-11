@@ -80,6 +80,8 @@ static uint8_t g_retries = 3;
 static uint16_t g_retries_timeout_ms = 200;
 static uint16_t g_set_id_timeout_ms = 300;
 
+static std::string g_node_uid = "";
+
 #if CONFIG_SM_COORDINATOR
 	static uint8_t g_coordinator = true;
 #endif
@@ -252,10 +254,8 @@ void event_handler(struct esb_evt const *event)
 {
 	switch (event->evt_id) {
 	case ESB_EVENT_TX_SUCCESS:
-		PIN_SM_SET;
 		LOG_DBG("TX SUCCESS pid(%d)",tx_msg.pid);
         mesh_post_tx();
-		PIN_SM_CLEAR;
 		break;
 	case ESB_EVENT_TX_FAILED:
 		LOG_DBG("TX FAILED pid(%d)",tx_msg.pid);
@@ -263,11 +263,9 @@ void event_handler(struct esb_evt const *event)
 		mesh_post_tx();
 		break;
 	case ESB_EVENT_RX_RECEIVED://not yet parsed in rx_msg
-		PIN_SM_SET;
 		rx_timestamp = k_uptime_ticks();
 		LOG_DBG("RX Event");
 		k_sem_give(&sem_rx);
-		PIN_SM_CLEAR;
 		break;
 	default:
 		LOG_ERR("ESB Unhandled Event (%d)",event->evt_id);
@@ -277,16 +275,26 @@ void event_handler(struct esb_evt const *event)
 }
 
 //thread jitter guard
-void sm_rx_delay_ms(int64_t delay)
+int64_t sm_rx_sync_ms(int64_t delay)
 {
-	PIN_SM_SET;
 	int64_t target_ticks_delay = rx_timestamp + k_ms_to_ticks_floor64(delay);
 	if(target_ticks_delay < k_uptime_ticks()){
 		int64_t delta = k_uptime_ticks() - target_ticks_delay;
 		printf("sm> /!\\ target_ticks_delay missed by (%d) us\n", (int)k_ticks_to_us_floor64(delta));
 	}
 	while((target_ticks_delay) > k_uptime_ticks());
-	PIN_SM_CLEAR;
+	return target_ticks_delay;
+}
+
+int64_t sm_sync_ms(int64_t start,int64_t delay)
+{
+	int64_t target_ticks_delay = start + k_ms_to_ticks_floor64(delay);
+	if(target_ticks_delay < k_uptime_ticks()){
+		int64_t delta = k_uptime_ticks() - target_ticks_delay;
+		printf("sm> /!\\ target_ticks_delay missed by (%d) us\n", (int)k_ticks_to_us_floor64(delta));
+	}
+	while((target_ticks_delay) > k_uptime_ticks());
+	return target_ticks_delay;
 }
 
 void simplemesh_rx_thread()
@@ -326,7 +334,7 @@ void simplemesh_rx_thread()
 				//-------------Routing-------------
 				mesh_rx_handler(rx_msg);
 				PIN_SM_SET;
-				k_sleep(K_USEC(10));
+				k_busy_wait(50);
 				PIN_SM_CLEAR;
 			}
 		}
@@ -482,6 +490,12 @@ void sm_start()
 	}
 	LOG_INF("sm_start initialization complete");
 	
+	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
+	long unsigned int id1 = NRF_FICR->DEVICEID[1];
+	char uid_text[20];
+	int str_len = sprintf(uid_text,"%08lX%08lX",id0,id1);
+	g_node_uid = std::string(uid_text,str_len);
+
 	#if CONFIG_SM_SNIFFER
 		LOG_DBG("sniffer does not need a nodeid");
 	#else
@@ -505,6 +519,7 @@ void sm_start()
 			}
 		}
 	#endif
+
 }
 
 void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler)
@@ -625,6 +640,11 @@ uint8_t coord_assign_short_id(std::string &longid)
 	}
 }
 
+std::string sm_get_uid()
+{
+	return g_node_uid;
+}
+
 uint8_t sm_get_sid()
 {
 	return g_node_id;
@@ -632,27 +652,27 @@ uint8_t sm_get_sid()
 
 void sm_diag(json &data)
 {
-	std::string rf_diag = data["rf_diag"];
-	if(rf_diag.compare("ping") == 0){
-		json rf_diag_response;
-		rf_diag_response["rf_diag"] = "pong";
-		rf_diag_response["rssi"] = rx_msg.rssi;
-		rf_diag_response["time"] = rx_timestamp;
-		mesh_bcast_json(rf_diag_response);
+	std::string rf_cmd = data["rf_cmd"];
+	if(rf_cmd.compare("ping") == 0){
+		json rf_cmd_response;
+		rf_cmd_response["rf_cmd"] = "pong";
+		rf_cmd_response["rssi"] = rx_msg.rssi;
+		rf_cmd_response["time"] = rx_timestamp;
+		mesh_bcast_json(rf_cmd_response);
 		printf("sm> ping -> pong ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
-	}else if(rf_diag.compare("target_ping") == 0){
+	}else if(rf_cmd.compare("target_ping") == 0){
 		//Forward the request to the target
 		json ping_request;
-		ping_request["rf_diag"] = "ping";
+		ping_request["rf_cmd"] = "ping";
 		std::string target = data["target"];
 		mesh_bcast_json_to(ping_request, target);
 		printf("sm> ping ; target=%s\n",target.c_str());
 		//then repsond for self diag
-		json rf_diag_response;
-		rf_diag_response["rf_diag"] = "pinger";
-		rf_diag_response["rssi"] = rx_msg.rssi;
-		rf_diag_response["time"] = rx_timestamp;
-		mesh_bcast_json(rf_diag_response);
+		json rf_cmd_response;
+		rf_cmd_response["rf_cmd"] = "pinger";
+		rf_cmd_response["rssi"] = rx_msg.rssi;
+		rf_cmd_response["time"] = rx_timestamp;
+		mesh_bcast_json(rf_cmd_response);
 		printf("sm> pinger ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
 	}
 }

@@ -18,6 +18,14 @@
 #include <string.h>
 #include <nrf_erratas.h>
 
+#ifdef CONFIG_SM_GPIO_DEBUG
+	#define PIN_SM_SET 		(*(int * const)0x50000508) 	= 1<<CONFIG_SM_PIN_APP
+	#define PIN_SM_CLEAR 	(*(int *) 0x5000050C) 		= 1<<CONFIG_SM_PIN_APP
+#else
+	#define PIN_SM_SET
+	#define PIN_SM_CLEAR
+#endif
+
 /* Constants */
 
 /* 2 Mb RX wait for acknowledgment time-out value.
@@ -744,6 +752,7 @@ static void get_and_clear_irqs(uint32_t *interrupts)
 
 static void RADIO_IRQHandler(void)
 {
+	PIN_SM_SET;
     //nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_SLEEP);
     //nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_SLEEP);
 
@@ -774,10 +783,12 @@ static void RADIO_IRQHandler(void)
 			on_radio_disabled();
 		}
 	}
+	PIN_SM_CLEAR;
 }
 
 static void ESB_EVT_IRQHandler(void)
 {
+	PIN_SM_SET;
 	uint32_t interrupts;
 	struct esb_evt event;
 
@@ -798,6 +809,7 @@ static void ESB_EVT_IRQHandler(void)
 			event_handler(&event);
 		}
 	}
+	PIN_SM_CLEAR;
 }
 
 static void ESB_SYS_TIMER_IRQHandler(void)
