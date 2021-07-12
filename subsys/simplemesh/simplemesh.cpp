@@ -82,6 +82,11 @@ static uint16_t g_set_id_timeout_ms = 300;
 
 static std::string g_node_uid = "";
 
+#ifdef CONFIG_SM_LISTENER
+	static uint8_t g_active_listener = true;
+#else
+	static uint8_t g_active_listener = false;
+#endif
 #if CONFIG_SM_COORDINATOR
 	static uint8_t g_coordinator = true;
 #endif
@@ -93,19 +98,21 @@ void mesh_pre_tx()
 	{
 		esb_initialize();
 	}
-	#ifdef CONFIG_SM_LISTENER
+	if(g_active_listener){
         esb_stop_rx();
-    #endif
+	}
 }
 
 void mesh_post_tx()
 {
 	#ifdef CONFIG_SM_LISTENER
-        esb_start_rx();
-        LOG_DBG("switch to RX mode");
+		if(g_active_listener){
+			esb_start_rx();
+			LOG_DBG("switch to RX mode");
+		}
 	#else
-	esb_disable();
-	esb_enabled = false;
+		esb_disable();
+		esb_enabled = false;
     #endif
 	esb_tx_complete = true;
 }
@@ -675,4 +682,17 @@ void sm_diag(json &data)
 		mesh_bcast_json(rf_cmd_response);
 		printf("sm> pinger ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
 	}
+}
+
+
+void sm_start_rx()
+{
+	g_active_listener = true;
+	esb_start_rx();
+}
+
+void sm_stop_rx()
+{
+	g_active_listener = false;
+	esb_stop_rx();
 }

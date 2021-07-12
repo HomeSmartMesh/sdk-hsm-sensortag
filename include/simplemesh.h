@@ -83,5 +83,8 @@ int64_t sm_sync_ms(int64_t start,int64_t delay);
 
 void sm_diag(json &data);
 
+void sm_start_rx();
+void sm_stop_rx();
+
 }/*closing of extern "C" {*/
 #endif /*__cplusplus*/
