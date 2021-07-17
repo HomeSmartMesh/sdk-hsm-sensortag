@@ -3,25 +3,7 @@
 #include "simplemesh.h"
 
 static mesh_rx_json_handler_t m_app_rx_json_handler = NULL;
-std::string base_topic = "sm";
-std::string broadcast_topic_start = base_topic + "{";
-std::string self_topic;
 json request;
-
-std::string sm_get_topic()
-{
-	return base_topic + "/" + sm_get_uid();
-}
-
-bool is_self(std::string &payload)
-{
-	return (payload.rfind(self_topic,0) == 0);
-}
-
-bool is_broadcast(std::string &payload)
-{
-	return (payload.rfind(broadcast_topic_start,0) == 0);
-}
 
 void mesh_rx_handler(message_t* msg)
 {
@@ -41,7 +23,6 @@ void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler)
 {
 	sm_set_callback_rx_message(mesh_rx_handler);
 	m_app_rx_json_handler = rx_json_handler;
-	self_topic = sm_get_topic();
 }
 
 void mesh_bcast_string(std::string text)
@@ -51,18 +32,18 @@ void mesh_bcast_string(std::string text)
 
 void mesh_bcast_json(json &data)
 {
-	std::string message = self_topic + data.dump();
+	std::string message = sm_get_topic() + data.dump();
 	mesh_bcast_text(message.c_str());
 }
 
 void mesh_bcast_json_to(json &data,std::string &target)
 {
-	std::string message = base_topic + "/" + target + data.dump();
+	std::string message = sm_get_base_topic() + "/" + target + data.dump();
 	mesh_bcast_text(message.c_str());
 }
 
 void mesh_send_json(uint8_t dest_id, json &data)
 {
-	std::string message = self_topic + data.dump();
+	std::string message = sm_get_topic() + data.dump();
 	mesh_send_text(dest_id,message);
 }

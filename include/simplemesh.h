@@ -65,6 +65,9 @@ typedef void (*mesh_rx_json_handler_t)(std::string &topic, json &data);
 uint8_t sm_get_sid();
 std::string sm_get_uid();
 std::string sm_get_topic();
+std::string sm_get_base_topic();
+
+bool is_broadcast(std::string &payload);
 bool is_self(std::string &payload);
 void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler);
 void mesh_bcast_string(std::string text);

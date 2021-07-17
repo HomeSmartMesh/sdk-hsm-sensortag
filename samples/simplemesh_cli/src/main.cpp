@@ -27,12 +27,7 @@ void main(void)
 
 	sm_start();
 	std::string uid = sm_get_uid();
-	printf("main>Simple Mesh UID [%s]\n",uid.c_str());
-
-	std::string topic = sm_get_topic();
-	j["sniffer"] = "started";
-	mesh_bcast_json(j);
-	printf("%s\n",j.dump().c_str());
+	printf("simplemesh_cli> listening from UID (%s)\n",uid.c_str());
 
 	console_getline_init();
 	while (1) {

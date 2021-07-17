@@ -50,7 +50,7 @@ int esb_initialize();
 uint8_t coord_assign_short_id(std::string &longid);
 void mesh_set_node_id(std::string &longid, uint8_t shortid);
 bool mesh_request_node_id();
-uint8_t take_node_id(message_t &msg);
+bool take_node_id(message_t &msg,uint8_t &nodeid);
 //----------------------------- -------------------------- -----------------------------
 #define STACKSIZE 8192
 #define RX_PRIORITY 20
@@ -81,6 +81,10 @@ static uint16_t g_retries_timeout_ms = 200;
 static uint16_t g_set_id_timeout_ms = 300;
 
 static std::string g_node_uid = "";
+static std::string base_topic = "sm";
+static std::string broadcast_topic_start = base_topic + "{";
+static std::string self_topic;
+
 
 #ifdef CONFIG_SM_LISTENER
 	static uint8_t g_active_listener = true;
@@ -368,11 +372,13 @@ void mesh_rx_handler(message_t &msg)
 			//ignore as a sniffer
 			#else
 			LOG_DBG("received set node it");
-			g_node_id = take_node_id(msg);//on error no effect with old id
-			k_sem_give(&sem_id_set);//unleash the higher prio waiting for 'g_node_id'
-			json j;
-			j["shortid"] = g_node_id;
-			mesh_bcast_json(j);
+			bool taken = take_node_id(msg,g_node_id);
+			if(taken){
+				k_sem_give(&sem_id_set);//unleash the higher prio waiting for 'g_node_id'
+				json j;
+				j["shortid"] = g_node_id;
+				mesh_bcast_json(j);
+			}
 			#endif
         }
 	}
@@ -502,6 +508,7 @@ void sm_start()
 	char uid_text[20];
 	int str_len = sprintf(uid_text,"%08lX%08lX",id0,id1);
 	g_node_uid = std::string(uid_text,str_len);
+	self_topic = base_topic + "/" + g_node_uid;
 
 	#if CONFIG_SM_SNIFFER
 		LOG_DBG("sniffer does not need a nodeid");
@@ -573,24 +580,23 @@ void mesh_send_text(uint8_t dest,std::string &text)
 	}
 }
 
-uint8_t take_node_id(message_t &msg)
+bool take_node_id(message_t &msg,uint8_t &nodeid)
 {
 	std::string uid = sm_get_uid();
 	uint8_t len_node_id = uid.length();
 	if(msg.payload_length != len_node_id+3){
 		LOG_ERR("unexpected set node id length %d instead of %d",msg.payload_length,len_node_id+3);
-		return g_node_id;
+		return false;
 	}
 	std::string this_node_id_str((char*)msg.payload,len_node_id);
 	if(this_node_id_str.compare(uid) != 0){
 		LOG_ERR("uid mismatch");
 		printf("sm> Error : uid[%s] received[%s]\n",uid.c_str(),this_node_id_str.c_str());
-		return g_node_id;
+		return false;
 	}
 
-	uint8_t new_node_id;
-	sscanf((char*)(msg.payload+len_node_id+1),"%2hhx",&new_node_id);
-	return new_node_id;
+	sscanf((char*)(msg.payload+len_node_id+1),"%2hhx",&nodeid);
+	return true;
 }
 
 //a node id is needed before it's possible to send and receive directed messages
@@ -645,6 +651,26 @@ uint8_t coord_assign_short_id(std::string &longid)
 		nodes_ids[longid] = newid;
 		return newid;
 	}
+}
+
+bool is_self(std::string &payload)
+{
+	return (payload.rfind(self_topic,0) == 0);
+}
+
+bool is_broadcast(std::string &payload)
+{
+	return (payload.rfind(broadcast_topic_start,0) == 0);
+}
+
+std::string sm_get_base_topic()
+{
+	return base_topic;
+}
+
+std::string sm_get_topic()
+{
+	return self_topic;
 }
 
 std::string sm_get_uid()
