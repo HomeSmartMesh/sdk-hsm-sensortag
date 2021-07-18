@@ -4,6 +4,7 @@
 
 static mesh_rx_json_handler_t m_app_rx_json_handler = NULL;
 json request;
+bool critical_parse=false;
 
 void mesh_rx_handler(message_t* msg)
 {
@@ -13,7 +14,14 @@ void mesh_rx_handler(message_t* msg)
 			size_t json_begin = payload.find("{");
 			std::string topic = payload.substr(0,json_begin);
 			std::string json_body = payload.substr(json_begin);
-			request = json::parse(json_body);
+			critical_parse = true;
+			try{
+				printf("trying json::parse\n");
+				request = json::parse(json_body);
+			}catch(json::parse_error& ex){
+				printf("json::parse threw an exception at byte %d\n",ex.byte);
+			}
+			critical_parse = false;
 			m_app_rx_json_handler(topic,request);
 		}
 	}

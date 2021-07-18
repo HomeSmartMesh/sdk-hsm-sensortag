@@ -376,7 +376,9 @@ void mesh_rx_handler(message_t &msg)
 			if(taken){
 				k_sem_give(&sem_id_set);//unleash the higher prio waiting for 'g_node_id'
 				json j;
-				j["shortid"] = g_node_id;
+				j["rf_cmd"] = "sid";
+				j["sid"] = g_node_id;
+				mesh_bcast_json(j);
 				mesh_bcast_json(j);
 			}
 			#endif
@@ -526,7 +528,8 @@ void sm_start()
 				nodes_ids[uid] = g_node_id;
 				printf("sm_start> [%s] acting as coordinator with short id [0]\n",uid.c_str());
 				json j;
-				j["shortid"] = g_node_id;
+				j["rf_cmd"] = "sid";
+				j["sid"] = g_node_id;
 				mesh_bcast_json(j);
 			}else{
 				printf("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
@@ -689,6 +692,7 @@ void sm_diag(json &data)
 	if(rf_cmd.compare("ping") == 0){
 		json rf_cmd_response;
 		rf_cmd_response["rf_cmd"] = "pong";
+		rf_cmd_response["sid"] = g_node_id;
 		rf_cmd_response["rssi"] = rx_msg.rssi;
 		rf_cmd_response["time"] = rx_timestamp;
 		mesh_bcast_json(rf_cmd_response);
@@ -704,9 +708,23 @@ void sm_diag(json &data)
 		json rf_cmd_response;
 		rf_cmd_response["rf_cmd"] = "pinger";
 		rf_cmd_response["rssi"] = rx_msg.rssi;
+		rf_cmd_response["sid"] = g_node_id;
 		rf_cmd_response["time"] = rx_timestamp;
 		mesh_bcast_json(rf_cmd_response);
 		printf("sm> pinger ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
+	}else if(rf_cmd.compare("sid") == 0){
+		if(data.contains("sid")){
+			if((g_node_id != 0) && (data["sid"] != 0)){
+				g_node_id = data["sid"];
+			}else{
+				printf("sm> change of coordinator short id 0 not supported\n");
+			}
+		}
+		json rf_cmd_response;
+		rf_cmd_response["rf_cmd"] = "sid";
+		rf_cmd_response["sid"] = g_node_id;
+		mesh_bcast_json(rf_cmd_response);
+		printf("sm> short id = %d\n",g_node_id);
 	}
 }
 
