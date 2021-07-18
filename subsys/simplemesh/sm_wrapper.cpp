@@ -14,9 +14,8 @@ void mesh_rx_handler(message_t* msg)
 			size_t json_begin = payload.find("{");
 			std::string topic = payload.substr(0,json_begin);
 			std::string json_body = payload.substr(json_begin);
-			critical_parse = true;
+			critical_parse = true;//exceptions config not supported, ends in libc-hooks.c "exit\n"
 			try{
-				printf("trying json::parse\n");
 				request = json::parse(json_body);
 			}catch(json::parse_error& ex){
 				printf("json::parse threw an exception at byte %d\n",ex.byte);
