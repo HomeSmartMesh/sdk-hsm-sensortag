@@ -15,11 +15,15 @@ void mesh_rx_handler(message_t* msg)
 			std::string topic = payload.substr(0,json_begin);
 			std::string json_body = payload.substr(json_begin);
 			critical_parse = true;//exceptions config not supported, ends in libc-hooks.c "exit\n"
-			try{
+			#ifdef CONFIG_EXCEPTIONS
+				try{
+					request = json::parse(json_body);
+				}catch(json::parse_error& ex){
+					printf("json::parse threw an exception at byte %d\n",ex.byte);
+				}
+			#else
 				request = json::parse(json_body);
-			}catch(json::parse_error& ex){
-				printf("json::parse threw an exception at byte %d\n",ex.byte);
-			}
+			#endif
 			critical_parse = false;
 			m_app_rx_json_handler(topic,request);
 		}

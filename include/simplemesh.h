@@ -28,7 +28,8 @@ namespace sm
         ping            =  0x00,
         node_id_get     =  0x01,//(1) ['uid': 8 byets in 16 chars text]
         node_id_set     =  0x02,//(2) ['uid:shortid' : short id 1 byte in 2 chars text]
-        text            =  0x16//(22)
+        text            =  0x16,//(22)
+        data            =  0x20
     };
 
 }
@@ -76,6 +77,7 @@ void mesh_bcast_json_to(json &data,std::string &target);
 
 void mesh_send_json(uint8_t dest_id, json &data);
 void mesh_send_text(uint8_t dest_id, std::string &text);
+void mesh_bcast_data(uint8_t * data,uint8_t size);
 
 #ifdef CONFIG_SM_GPIO_DEBUG
     void sm_gpio_init(const struct device *gpio_dev);

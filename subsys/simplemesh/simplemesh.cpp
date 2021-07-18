@@ -337,10 +337,17 @@ void simplemesh_rx_thread()
 				{
 					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
 					printf("node_id_set:%s\n",text.c_str());
-				}
+				}else if(rx_msg.pid == (uint8_t)sm::pid::data){
+					printf("data_length:%u;data:",rx_msg.payload_length);
+					uint8_t * data = rx_msg.payload;
+					for(int i=0;i<rx_msg.payload_length;i++){
+						printf("%02x ",*(data++));
+					}
+					printf("\n");
+        		}
 				else
 				{
-					printf("%d:{\"pid\":0x%02X,\"length\":%d}",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+					printf("%d:{\"pid\":0x%02X,\"length\":%d}\n",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
 				}
 				//-------------Routing-------------
 				mesh_rx_handler(rx_msg);
@@ -550,7 +557,17 @@ void mesh_send_packet(sm::pid pid,uint8_t dest,uint8_t * data,uint32_t size)
 {
 	tx_msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
 	tx_msg.pid     = (uint8_t)(pid);
-	tx_msg.source  = 0xFF;//TODO config node id
+	tx_msg.source  = g_node_id;
+	tx_msg.payload = data;
+	tx_msg.payload_length = size;
+	mesh_tx_message(&tx_msg);
+}
+
+void mesh_bcast_data(uint8_t * data,uint8_t size)
+{
+	tx_msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
+	tx_msg.pid     = (uint8_t)sm::pid::data;
+	tx_msg.source  = g_node_id;
 	tx_msg.payload = data;
 	tx_msg.payload_length = size;
 	mesh_tx_message(&tx_msg);
@@ -727,7 +744,6 @@ void sm_diag(json &data)
 		printf("sm> short id = %d\n",g_node_id);
 	}
 }
-
 
 void sm_start_rx()
 {
