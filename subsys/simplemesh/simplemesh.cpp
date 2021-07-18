@@ -341,7 +341,7 @@ void simplemesh_rx_thread()
 					printf("data_length:%u;data:",rx_msg.payload_length);
 					uint8_t * data = rx_msg.payload;
 					for(int i=0;i<rx_msg.payload_length;i++){
-						printf("%02x ",*(data++));
+						printf("%02x",*(data++));
 					}
 					printf("\n");
         		}
