@@ -206,7 +206,7 @@ void mesh_tx_ack(message_t& msg, uint8_t ttl)
     mesh_tx_message(&tx_msg);
 }
 //limited to 255
-void mesh_bcast_data(sm::pid pid,uint8_t * data,uint8_t size)
+void mesh_bcast_pid(sm::pid pid,uint8_t * data,uint8_t size)
 {
 	if(size > sm::max_msg_size)
 	{
@@ -229,7 +229,7 @@ void mesh_bcast_text(const char *text)
 		LOG_ERR("message truncated at %d from %d", size,sm::max_msg_size);
         size = sm::max_msg_size;
     }
-    mesh_bcast_data(sm::pid::text,(uint8_t*)text,size);
+    mesh_bcast_pid(sm::pid::text,(uint8_t*)text,size);
 }
 
 bool mesh_send_data_ack(sm::pid pid,uint8_t dest, uint8_t* data, uint8_t size)
