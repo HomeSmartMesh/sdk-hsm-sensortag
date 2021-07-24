@@ -3,16 +3,48 @@
 #include <stdio.h>
 #include <usb/usb_device.h>
 #include <console/console.h>
+#include <sys/reboot.h>
 
 #include <json.hpp>
 #include <simplemesh.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 json j;
+extern bool critical_parse;
+
+
+#if (CONFIG_SM_GPIO_DEBUG)
+	#include <drivers/gpio.h>
+	const struct device *gpio_dev;
+
+	#if CONFIG_SM_GPIO_DEBUG
+		//0.625 us per toggle
+		#define PIN_SM_SET 		gpio_pin_set(gpio_dev, CONFIG_SM_PIN_APP, 1)
+		#define PIN_SM_CLEAR 	gpio_pin_set(gpio_dev, CONFIG_SM_PIN_APP, 0)
+	#else
+		#define PIN_SM_SET
+		#define PIN_SM_CLEAR
+	#endif
+#endif
+
+void app_gpio_init()
+{
+	#if (CONFIG_SM_GPIO_DEBUG)
+		gpio_dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
+		#if CONFIG_SM_GPIO_DEBUG
+			gpio_pin_configure(gpio_dev, CONFIG_SM_PIN_APP, GPIO_OUTPUT_ACTIVE);
+			sm_gpio_init(gpio_dev);
+			PIN_SM_CLEAR;
+			PIN_SM_SET;
+			PIN_SM_CLEAR;
+		#endif
+	#endif
+}
 
 
 void main(void)
 {
+	app_gpio_init();
 	#ifdef CONFIG_USB
 		int ret;
 		ret = usb_enable(NULL);
@@ -33,6 +65,15 @@ void main(void)
 	while (1) {
 		printf(">");fflush(NULL);
 		char *text = console_getline();
-		mesh_bcast_text(text);
+	    uint8_t size = strlen(text);
+		std::string payload(text,size);
+		if(payload.find("{") != std::string::npos){
+			mesh_bcast_packet(sm::pid::json,(uint8_t*)text,size);
+		}else{
+			mesh_bcast_packet(sm::pid::text,(uint8_t*)text,size);
+		}
+		if(critical_parse){
+			sys_reboot(SYS_REBOOT_WARM);//param unused on ARM-M
+		}
 	}
 }

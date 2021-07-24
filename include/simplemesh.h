@@ -13,6 +13,7 @@ namespace sm
     const uint8_t bcast_header_length = 4;
     const uint8_t p2p_header_length   = 5;
     const uint8_t max_msg_size        = CONFIG_ESB_MAX_PAYLOAD_LENGTH - p2p_header_length;
+    const uint32_t max_file_size      = 4096;
 
     namespace control
     {
@@ -29,9 +30,10 @@ namespace sm
         node_id_get     =  0x01,//(1) ['uid': 8 byets in 16 chars text]
         node_id_set     =  0x02,//(2) ['uid:shortid' : short id 1 byte in 2 chars text]
         text            =  0x16,//(22)
-        data            =  0x20
+        json            =  0x17,//(23)
+        file_info       =  0x20,
+        file_section    =  0x21
     };
-
 }
 
 //------------------------- Mesh Macros -------------------------
@@ -54,15 +56,25 @@ typedef struct
     uint8_t *payload;
 }message_t;
 
+typedef struct
+{
+	std::string name;
+	uint32_t    size;
+	uint8_t     seq_size;
+	uint8_t     seq_count;
+	uint32_t    nb_seq;
+	uint8_t     last_seq_size;
+    uint8_t*    buffer_p;
+    uint8_t     buffer[sm::max_file_size];
+}file_t;
+
 typedef void (*mesh_rx_handler_t)(message_t*);
 
 void sm_start();
-void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler);
-void mesh_bcast_text(const char *text);
 
 //------------------------- CPP wrapper interfaces -------------------------
 
-typedef void (*mesh_rx_json_handler_t)(std::string &topic, json &data);
+typedef void (*mesh_rx_json_handler_t)(uint8_t source, std::string &topic, json &data);
 uint8_t sm_get_sid();
 std::string sm_get_uid();
 std::string sm_get_topic();
@@ -71,13 +83,13 @@ std::string sm_get_base_topic();
 bool is_broadcast(std::string &payload);
 bool is_self(std::string &payload);
 void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler);
-void mesh_bcast_string(std::string text);
+
+void mesh_bcast_packet(sm::pid pid,uint8_t * data,uint8_t size);
 void mesh_bcast_json(json &data);
 void mesh_bcast_json_to(json &data,std::string &target);
 
 void mesh_send_json(uint8_t dest_id, json &data);
-void mesh_send_text(uint8_t dest_id, std::string &text);
-void mesh_bcast_data(uint8_t * data,uint8_t size);
+void mesh_send_file(const char * name, uint8_t dest,uint8_t* data, uint32_t size);
 
 #ifdef CONFIG_SM_GPIO_DEBUG
     void sm_gpio_init(const struct device *gpio_dev);

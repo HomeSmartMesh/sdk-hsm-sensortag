@@ -19,12 +19,6 @@ config SM_COORDINATOR
 	help
 	  If the device assigns short ids
 
-config SM_SNIFFER
-	bool "sniff only"
-	default n
-	help
-	  do not interact with the mesh do not egt short id
-
 config SM_CHANNEL
 	int "RF Channel"
 	default 20

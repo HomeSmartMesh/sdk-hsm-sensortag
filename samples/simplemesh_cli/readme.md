@@ -10,6 +10,6 @@ west build -b nrf52840dongle_nrf52840 -- -DCONF_FILE="prj.conf overlay-usb.conf"
 
 west flash
 
-west flash --snr 260103215
-
+west flash --snr 760130143
+west flash --snr 760130128
 ```

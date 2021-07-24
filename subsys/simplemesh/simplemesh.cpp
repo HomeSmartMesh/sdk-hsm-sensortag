@@ -41,7 +41,11 @@ LOG_MODULE_REGISTER(simplemesh, LOG_LEVEL_DBG);
 
 //----------------------------- rx event, thread and handler -----------------------------
 void simplemesh_rx_thread();
-void mesh_rx_handler(message_t &msg);
+bool rx_routing_handler(message_t &msg);
+void rx_gateway_handler(message_t &msg);
+void rx_json_handler(message_t &msg);
+void rx_file_header_handler(uint8_t * data,uint8_t size);
+void rx_file_section_handler(message_t &section_msg);
 
 //----------------------------- startup init -----------------------------
 int esb_initialize();
@@ -51,6 +55,11 @@ uint8_t coord_assign_short_id(std::string &longid);
 void mesh_set_node_id(std::string &longid, uint8_t shortid);
 bool mesh_request_node_id();
 bool take_node_id(message_t &msg,uint8_t &nodeid);
+
+static mesh_rx_json_handler_t m_app_rx_json_handler = NULL;
+json request;
+bool critical_parse=false;
+
 //----------------------------- -------------------------- -----------------------------
 #define STACKSIZE 8192
 #define RX_PRIORITY 20
@@ -67,8 +76,7 @@ static struct esb_payload rx_payload;
 static message_t rx_msg;
 static message_t tx_msg;
 int64_t rx_timestamp;
-
-static mesh_rx_handler_t m_app_rx_handler = NULL;
+file_t file_data;
 
 static volatile bool esb_enabled = false;
 static volatile bool esb_completed = false;
@@ -205,8 +213,8 @@ void mesh_tx_ack(message_t& msg, uint8_t ttl)
 
     mesh_tx_message(&tx_msg);
 }
-//limited to 255
-void mesh_bcast_pid(sm::pid pid,uint8_t * data,uint8_t size)
+
+void mesh_bcast_packet(sm::pid pid,uint8_t * data,uint8_t size)
 {
 	if(size > sm::max_msg_size)
 	{
@@ -220,24 +228,20 @@ void mesh_bcast_pid(sm::pid pid,uint8_t * data,uint8_t size)
 
     mesh_tx_message(&tx_msg);
 }
-//limited to 255
-void mesh_bcast_text(const char *text)
+
+void mesh_send_packet(sm::pid pid,uint8_t dest,uint8_t * data,uint8_t size)
 {
-    uint8_t size = strlen(text);
-    if(size>sm::max_msg_size)//truncate in case of long message
-    {
-		LOG_ERR("message truncated at %d from %d", size,sm::max_msg_size);
-        size = sm::max_msg_size;
-    }
-    mesh_bcast_pid(sm::pid::text,(uint8_t*)text,size);
+	tx_msg.control = sm::control::msg_no_ack | g_ttl;
+	tx_msg.pid     = (uint8_t)(pid);
+	tx_msg.source  = g_node_id;
+	tx_msg.dest  = dest;
+	tx_msg.payload = data;
+	tx_msg.payload_length = size;
+	mesh_tx_message(&tx_msg);
 }
 
-bool mesh_send_data_ack(sm::pid pid,uint8_t dest, uint8_t* data, uint8_t size)
+bool mesh_send_packet_ack(sm::pid pid,uint8_t dest, uint8_t* data, uint8_t size)
 {
-	if(size > sm::max_msg_size)
-	{
-		return false;
-	}
     tx_msg.control = sm::control::msg_needs_ack | g_ttl;
     tx_msg.pid     = (uint8_t)pid;
     tx_msg.source  = g_node_id;
@@ -317,50 +321,116 @@ void simplemesh_rx_thread()
 			{
 				mesh_esb_2_message_payload(&rx_payload,&rx_msg);
 				LOG_DBG("RX pid(%u) size(%u)",rx_msg.pid,rx_msg.payload_length);
-				//-------------App-------------
-				if(m_app_rx_handler != NULL)//app gets all
+				if(rx_routing_handler(rx_msg))//id get set / ack
 				{
-					m_app_rx_handler(&rx_msg);
+					//handled in function call
+				}else if(m_app_rx_json_handler != NULL)//for sm::pid::json
+				{
+					rx_json_handler(rx_msg);
 				}
-				//-------------Dongle-------------
-				else if(rx_msg.pid == (uint8_t)(sm::pid::text))
-				{
-					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-					printf("%s\n",text.c_str());
+				else{
+					rx_gateway_handler(rx_msg);
 				}
-				else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
-				{
-					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-					printf("node_id_get:%s\n",text.c_str());
-				}
-				else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_set))
-				{
-					std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-					printf("node_id_set:%s\n",text.c_str());
-				}else if(rx_msg.pid == (uint8_t)sm::pid::data){
-					printf("data_length:%u;data:",rx_msg.payload_length);
-					uint8_t * data = rx_msg.payload;
-					for(int i=0;i<rx_msg.payload_length;i++){
-						printf("%02x",*(data++));
-					}
-					printf("\n");
-        		}
-				else
-				{
-					printf("%d:{\"pid\":0x%02X,\"length\":%d}\n",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
-				}
-				//-------------Routing-------------
-				mesh_rx_handler(rx_msg);
-				PIN_SM_SET;
-				k_busy_wait(50);
-				PIN_SM_CLEAR;
 			}
 		}
 	}
 }
 
-void mesh_rx_handler(message_t &msg)
+void rx_json_handler(message_t &msg)
 {
+	if(msg.pid == (uint8_t)(sm::pid::json)){
+		std::string payload((char*)msg.payload,msg.payload_length);
+		if(is_broadcast(payload) || is_self(payload)){
+			size_t json_begin = payload.find("{");
+			std::string topic = payload.substr(0,json_begin);
+			std::string json_body = payload.substr(json_begin);
+			critical_parse = true;//exceptions config not supported, ends in libc-hooks.c "exit\n"
+			#ifdef CONFIG_EXCEPTIONS
+				try{
+					request = json::parse(json_body);
+				}catch(json::parse_error& ex){
+					printf("json::parse threw an exception at byte %d\n",ex.byte);
+				}
+			#else
+				request = json::parse(json_body);
+			#endif
+			critical_parse = false;
+			m_app_rx_json_handler(msg.source,topic,request);
+		}
+	}
+}
+
+void rx_gateway_handler(message_t &rx_msg)
+{
+	if(rx_msg.pid == (uint8_t)(sm::pid::text))
+	{
+		std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+		printf("%s\n",text.c_str());
+	//}else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
+	//{
+	//	std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+	//	printf("node_id_get:%s\n",text.c_str());
+	//}
+	//else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_set))
+	//{
+	//	std::string text((char*)rx_msg.payload,rx_msg.payload_length);
+	//	printf("node_id_set:%s\n",text.c_str());
+	}else if(rx_msg.pid == (uint8_t)sm::pid::file_info){
+		rx_file_header_handler(rx_msg.payload,rx_msg.payload_length);
+	}else if(rx_msg.pid == (uint8_t)sm::pid::file_section){
+		rx_file_section_handler(rx_msg);
+	}
+	else
+	{
+		printf("%d:{\"pid\":0x%02X,\"length\":%d}\n",rx_msg.source,rx_msg.pid, rx_msg.payload_length);
+	}
+}
+
+void rx_file_header_handler(uint8_t * data,uint8_t size)
+{
+	std::string payload((char*)data,size);
+	size_t json_begin = payload.find("{");
+	std::string topic = payload.substr(0,json_begin);
+	std::string json_body = payload.substr(json_begin);
+	critical_parse = true;
+	request = json::parse(json_body);
+	critical_parse = false;
+	file_data.name 			= request["name"];
+	file_data.size 			= request["size"];
+	file_data.seq_size 		= request["seq_size"];
+	file_data.nb_seq   		= request["nb_seq"];
+	file_data.last_seq_size = request["last_seq_size"];
+	file_data.seq_count		= 0;
+	file_data.buffer_p		= file_data.buffer;
+}
+
+void rx_file_section_handler(message_t &section_msg)
+{
+	uint8_t this_seq_size = file_data.seq_size;
+	if(file_data.seq_count > file_data.nb_seq){
+		printf("file_error;seq_count:%u\n",file_data.seq_count);
+		return;
+	}else if(file_data.seq_count == file_data.nb_seq-1){
+		this_seq_size = file_data.last_seq_size;
+	}
+
+	if(section_msg.payload_length != this_seq_size){
+		printf("file_error;seq:%u;seq_size:%u;payload_length:%u\n",file_data.seq_count,this_seq_size,section_msg.payload_length);
+		return;
+	}
+
+	memcpy(file_data.buffer_p,section_msg.payload,this_seq_size);
+	file_data.buffer_p+=this_seq_size;
+	file_data.seq_count++;
+
+	if(file_data.seq_count == file_data.nb_seq){
+		printf("file received ; size:%u ; nb_seq:%u\n",file_data.size,file_data.nb_seq);
+	}
+}
+
+bool rx_routing_handler(message_t &msg)
+{
+	LOG_DBG("dest(%d) ; self(%d) ; pid(%d) ; ctl(%d)",msg.dest, g_node_id, msg.pid, msg.control);
     if(MESH_IS_BROADCAST(msg.control)){
         if(msg.pid == (uint8_t)sm::pid::node_id_get){
 			#ifdef CONFIG_SM_COORDINATOR
@@ -374,10 +444,8 @@ void mesh_rx_handler(message_t &msg)
 				LOG_DBG("get node id ignored, not coordinator");
 			}
 			#endif
+			return true;
         }else if(msg.pid == (uint8_t)sm::pid::node_id_set){
-			#ifdef CONFIG_SM_SNIFFER
-			//ignore as a sniffer
-			#else
 			LOG_DBG("received set node it");
 			bool taken = take_node_id(msg,g_node_id);
 			if(taken){
@@ -388,7 +456,7 @@ void mesh_rx_handler(message_t &msg)
 				mesh_bcast_json(j);
 				mesh_bcast_json(j);
 			}
-			#endif
+			return true;
         }
 	}
     else if(msg.dest == g_node_id){
@@ -396,10 +464,12 @@ void mesh_rx_handler(message_t &msg)
         if(MESH_WANT_ACKNOWLEDGE(msg.control)){
 			LOG_DBG("sending acknowledge back to (%d)",msg.source);
             mesh_tx_ack(msg,g_ttl);
+			return false;//still have to process the received message further
         }
         else if(MESH_IS_ACKNOWLEDGE(msg.control)){
 			LOG_DBG("acknowledge received from (%d)",msg.source);
             k_sem_give(&sem_ack);
+			return true;
         }
     }
     //only re-route messaegs directed to other than the current node itself
@@ -407,6 +477,7 @@ void mesh_rx_handler(message_t &msg)
     {
         //mesh_forward_message(msg);//a mesh forward is destructive, to be done at last step
     }
+	return false;
 }
 
 //----------------------------- startup init -----------------------------
@@ -519,78 +590,70 @@ void sm_start()
 	g_node_uid = std::string(uid_text,str_len);
 	self_topic = base_topic + "/" + g_node_uid;
 
-	#if CONFIG_SM_SNIFFER
-		LOG_DBG("sniffer does not need a nodeid");
-	#else
-		LOG_DBG("always start by requesting short id from [0]");
-		if(mesh_request_node_id()){//with broadcast retries and sem waiting for 'set id'
-			if(g_coordinator){
-				g_coordinator = false;//request node id got acknowledged
-				printf("sm_start> no longer coordinator\n");
-			}
-		}else{
-			if(g_coordinator){
-				std::string uid = sm_get_uid();
-				g_node_id = 0;
-				nodes_ids[uid] = g_node_id;
-				printf("sm_start> [%s] acting as coordinator with short id [0]\n",uid.c_str());
-				json j;
-				j["rf_cmd"] = "sid";
-				j["sid"] = g_node_id;
-				mesh_bcast_json(j);
-			}else{
-				printf("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
-			}
+	LOG_DBG("always start by requesting short id from [0]");
+	if(mesh_request_node_id()){//with broadcast retries and sem waiting for 'set id'
+		if(g_coordinator){
+			g_coordinator = false;//request node id got acknowledged
+			printf("sm_start> no longer coordinator\n");
 		}
-	#endif
+	}else{
+		if(g_coordinator){
+			std::string uid = sm_get_uid();
+			g_node_id = 0;
+			nodes_ids[uid] = g_node_id;
+			printf("sm_start> [%s] acting as coordinator with short id [0]\n",uid.c_str());
+			json j;
+			j["rf_cmd"] = "sid";
+			j["sid"] = g_node_id;
+			mesh_bcast_json(j);
+		}else{
+			printf("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
+		}
+	}
 
 }
 
-void sm_set_callback_rx_message(mesh_rx_handler_t rx_handler)
+void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler)
 {
-    m_app_rx_handler = rx_handler;
+	m_app_rx_json_handler = rx_json_handler;
 }
+
 
 //----------------------------- protocol specific hanlding -----------------------------
-
-void mesh_send_packet(sm::pid pid,uint8_t dest,uint8_t * data,uint32_t size)
+//self_uid -> dest
+void mesh_send_file_info(uint8_t dest_id, json &data)
 {
-	tx_msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
-	tx_msg.pid     = (uint8_t)(pid);
-	tx_msg.source  = g_node_id;
-	tx_msg.payload = data;
-	tx_msg.payload_length = size;
-	mesh_tx_message(&tx_msg);
-}
-
-void mesh_bcast_data(uint8_t * data,uint8_t size)
-{
-	tx_msg.control = 0x80 | g_ttl;         // broadcast | ttl = g_ttl
-	tx_msg.pid     = (uint8_t)sm::pid::data;
-	tx_msg.source  = g_node_id;
-	tx_msg.payload = data;
-	tx_msg.payload_length = size;
-	mesh_tx_message(&tx_msg);
+	std::string message = sm_get_topic() + data.dump();
+	mesh_send_packet_ack(sm::pid::file_info,dest_id,(uint8_t*)message.c_str(),message.length());
 }
 
 //blocking unlimited size
-void mesh_send_text(uint8_t dest,std::string &text)
+void mesh_send_file(const char * name, uint8_t dest,uint8_t* data, uint32_t size)
 {
-	uint8_t* data = (uint8_t*)text.c_str();
-	uint32_t size = text.length();
 	uint8_t seq_size = sm::max_msg_size;
 	uint32_t nb_seq   = (size / seq_size);
 	uint8_t last_seq_size = sm::max_msg_size;
-	if((size % seq_size) != 0){
+	if(size <= seq_size){
+		nb_seq = 1;
+		last_seq_size = size;
+	}else if((size % seq_size) != 0){
 		nb_seq++;
 		last_seq_size = size % seq_size;
 	}
+
+	json info;
+	info["name"] 			= name;
+	info["size"] 			= size;
+	info["nb_seq"] 			= nb_seq;
+	info["seq_size"] 		= seq_size;
+	info["last_seq_size"] 	= last_seq_size;
+	mesh_send_file_info(dest,info);
 
 	for(uint32_t i=0;i<nb_seq;i++){
 		if(i == nb_seq-1){//if last
 			seq_size = last_seq_size;
 		}
-		if(!mesh_send_data_ack(sm::pid::text,dest,data,seq_size)){
+		if(!mesh_send_packet_ack(sm::pid::file_section,dest,data,seq_size)){
 			LOG_ERR("mesh_tx_file_ack() failed");
 			continue;
 		}
@@ -599,6 +662,34 @@ void mesh_send_text(uint8_t dest,std::string &text)
 		}
 	}
 }
+
+//--json
+//self_uid -> bcast
+void mesh_bcast_json(json &data)
+{
+	std::string message = sm_get_topic() + data.dump();
+	mesh_bcast_packet(sm::pid::text,(uint8_t*)message.c_str(),message.length());
+}
+
+//target_uid -> bcast
+void mesh_bcast_json_to(json &data,std::string &target)
+{
+	std::string message = sm_get_base_topic() + "/" + target + data.dump();
+	mesh_bcast_packet(sm::pid::text,(uint8_t*)message.c_str(),message.length());
+}
+
+//self_uid -> dest
+void mesh_send_json(uint8_t dest_id, json &data,bool ack = false)
+{
+	std::string message = sm_get_topic() + data.dump();
+	if(ack){
+		mesh_send_packet_ack(sm::pid::json,dest_id,(uint8_t*)message.c_str(),message.length());
+	}else{
+		mesh_send_packet(sm::pid::json,dest_id,(uint8_t*)message.c_str(),message.length());
+	}
+}
+
+//--------------------------------- coordinator management functions ---------------------------------
 
 bool take_node_id(message_t &msg,uint8_t &nodeid)
 {
@@ -756,3 +847,4 @@ void sm_stop_rx()
 	g_active_listener = false;
 	esb_stop_rx();
 }
+
