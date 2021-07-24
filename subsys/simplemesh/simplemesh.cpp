@@ -255,9 +255,9 @@ bool mesh_send_packet_ack(sm::pid pid,uint8_t dest, uint8_t* data, uint8_t size)
 		if(k_sem_take(&sem_ack,K_MSEC(g_retries_timeout_ms)) == 0){
 			LOG_DBG("sem_ack obtained");
 			success = true;
-			continue;
+			break;
 		}
-		LOG_DBG("sem_ack timedout");
+		printf("sem_ack_error:timedout (%d)\n",i);
 	}
 
 	return success;
@@ -407,8 +407,8 @@ void rx_file_header_handler(uint8_t * data,uint8_t size)
 void rx_file_section_handler(message_t &section_msg)
 {
 	uint8_t this_seq_size = file_data.seq_size;
-	if(file_data.seq_count > file_data.nb_seq){
-		printf("file_error;seq_count:%u\n",file_data.seq_count);
+	if(file_data.seq_count > file_data.nb_seq-1){
+		printf("file_error;seq_count:%u;nb_seq:%u\n",file_data.seq_count,file_data.nb_seq);
 		return;
 	}else if(file_data.seq_count == file_data.nb_seq-1){
 		this_seq_size = file_data.last_seq_size;
@@ -424,7 +424,11 @@ void rx_file_section_handler(message_t &section_msg)
 	file_data.seq_count++;
 
 	if(file_data.seq_count == file_data.nb_seq){
-		printf("file received ; size:%u ; nb_seq:%u\n",file_data.size,file_data.nb_seq);
+		printf("uwb_cir_acc;size:%u;nb_seq:%u;data:",file_data.size,file_data.nb_seq);
+		for(uint32_t i=0;i<file_data.size;i++){
+			printf("%02X",file_data.buffer[i]);
+		}
+		printf("\n");
 	}
 }
 
