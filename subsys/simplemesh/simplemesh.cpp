@@ -290,23 +290,23 @@ void event_handler(struct esb_evt const *event)
 }
 
 //thread jitter guard
-int64_t sm_rx_sync_ms(int64_t delay)
+int64_t sm_rx_sync_ms(int lseq,int64_t delay)
 {
 	int64_t target_ticks_delay = rx_timestamp + k_ms_to_ticks_floor64(delay);
 	if(target_ticks_delay < k_uptime_ticks()){
 		int64_t delta = k_uptime_ticks() - target_ticks_delay;
-		printf("sm> /!\\ target_ticks_delay missed by (%d) us\n", (int)k_ticks_to_us_floor64(delta));
+		printf("sm> /!\\ target_ticks_delay missed by (%d) us at seq(%d)\n", (int)k_ticks_to_us_floor64(delta),lseq);
 	}
 	while((target_ticks_delay) > k_uptime_ticks());
 	return target_ticks_delay;
 }
 
-int64_t sm_sync_ms(int64_t start,int64_t delay)
+int64_t sm_sync_ms(int lseq,int64_t start,int64_t delay)
 {
 	int64_t target_ticks_delay = start + k_ms_to_ticks_floor64(delay);
 	if(target_ticks_delay < k_uptime_ticks()){
 		int64_t delta = k_uptime_ticks() - target_ticks_delay;
-		printf("sm> /!\\ target_ticks_delay missed by (%d) us\n", (int)k_ticks_to_us_floor64(delta));
+		printf("sm> /!\\ target_ticks_delay missed by (%d) us at seq(%d)\n", (int)k_ticks_to_us_floor64(delta),lseq);
 	}
 	while((target_ticks_delay) > k_uptime_ticks());
 	return target_ticks_delay;
@@ -701,8 +701,7 @@ bool take_node_id(message_t &msg,uint8_t &nodeid)
 	}
 	std::string this_node_id_str((char*)msg.payload,len_node_id);
 	if(this_node_id_str.compare(uid) != 0){
-		LOG_ERR("uid mismatch");
-		printf("sm> Error : uid[%s] received[%s]\n",uid.c_str(),this_node_id_str.c_str());
+		LOG_DBG("not for this node id : uid[%s] received[%s]\n",uid.c_str(),this_node_id_str.c_str());
 		return false;
 	}
 

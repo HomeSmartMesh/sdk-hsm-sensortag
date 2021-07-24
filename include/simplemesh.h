@@ -95,8 +95,8 @@ void mesh_send_file(const char * name, uint8_t dest,uint8_t* data, uint32_t size
     void sm_gpio_init(const struct device *gpio_dev);
 #endif
 
-int64_t sm_rx_sync_ms(int64_t delay);
-int64_t sm_sync_ms(int64_t start,int64_t delay);
+int64_t sm_rx_sync_ms(int lseq,int64_t delay);
+int64_t sm_sync_ms(int lseq,int64_t start,int64_t delay);
 
 void sm_diag(json &data);
 
