@@ -102,6 +102,8 @@ static std::string self_topic;
 #endif
 #if CONFIG_SM_COORDINATOR
 	static uint8_t g_coordinator = true;
+#else
+	static uint8_t g_coordinator = false;
 #endif
 std::map<std::string,uint8_t> nodes_ids;
 
