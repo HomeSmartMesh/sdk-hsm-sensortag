@@ -29,6 +29,7 @@ namespace sm
         ping            =  0x00,
         node_id_get     =  0x01,//(1) ['uid': 8 byets in 16 chars text]
         node_id_set     =  0x02,//(2) ['uid:shortid' : short id 1 byte in 2 chars text]
+        node_id_reset   =  0x03,//(3) on new coordinator all nodes shall request a new short id
         text            =  0x16,//(22)
         json            =  0x17,//(23)
         file_info       =  0x20,

@@ -12,7 +12,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 json j;
 extern bool critical_parse;
 
-
 #if (CONFIG_SM_GPIO_DEBUG)
 	#include <drivers/gpio.h>
 	const struct device *gpio_dev;
@@ -53,13 +52,13 @@ void main(void)
 			return;
 		}
 		//TODO wait for USB to be connected
+		k_sleep(K_SECONDS(5));
 	#endif
 
-	k_sleep(K_SECONDS(5));
-
+	printf("main> simplemesh_cli start ------------- \n");
 	sm_start();
 	std::string uid = sm_get_uid();
-	printf("simplemesh_cli> listening from UID (%s)\n",uid.c_str());
+	printf("main> UID (%s)\n",uid.c_str());
 
 	console_getline_init();
 	while (1) {
@@ -72,7 +71,7 @@ void main(void)
 		}else{
 			mesh_bcast_packet(sm::pid::text,(uint8_t*)text,size);
 		}
-		if(critical_parse){
+		if(critical_parse){//non functional in simplemesh_cli due to blocking 
 			sys_reboot(SYS_REBOOT_WARM);//param unused on ARM-M
 		}
 	}

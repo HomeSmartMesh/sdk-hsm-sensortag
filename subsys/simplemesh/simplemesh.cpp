@@ -14,6 +14,7 @@ extern "C"{
 #include <esb.h>
 #include <zephyr.h>
 #include <zephyr/types.h>
+#include <sys/reboot.h>
 #include <stdio.h>
 
 #include "simplemesh.h"
@@ -64,7 +65,7 @@ bool critical_parse=false;
 #define STACKSIZE 8192
 #define RX_PRIORITY 20
 
-K_SEM_DEFINE(sem_rx, 0, 2);//can be assigned while already given
+K_SEM_DEFINE(sem_rx, 0, 5);//can be assigned while already given
 K_THREAD_DEFINE(sm_receiver, STACKSIZE, simplemesh_rx_thread, 
                 NULL, NULL, NULL, RX_PRIORITY, 0, 0);
 
@@ -214,7 +215,7 @@ void mesh_tx_ack(message_t& msg, uint8_t ttl)
     mesh_tx_message(&tx_msg);
 }
 
-void mesh_bcast_packet(sm::pid pid,uint8_t * data,uint8_t size)
+void mesh_bcast_packet(sm::pid pid,uint8_t * data=nullptr,uint8_t size=0)
 {
 	if(size > sm::max_msg_size)
 	{
@@ -362,19 +363,11 @@ void rx_json_handler(message_t &msg)
 
 void rx_gateway_handler(message_t &rx_msg)
 {
-	if(rx_msg.pid == (uint8_t)(sm::pid::text))
+	//the gateway treats json as text
+	if((rx_msg.pid == (uint8_t)(sm::pid::text)) || (rx_msg.pid == (uint8_t)(sm::pid::json)))
 	{
 		std::string text((char*)rx_msg.payload,rx_msg.payload_length);
 		printf("%s\n",text.c_str());
-	//}else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_get))
-	//{
-	//	std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-	//	printf("node_id_get:%s\n",text.c_str());
-	//}
-	//else if(rx_msg.pid == (uint8_t)(sm::pid::node_id_set))
-	//{
-	//	std::string text((char*)rx_msg.payload,rx_msg.payload_length);
-	//	printf("node_id_set:%s\n",text.c_str());
 	}else if(rx_msg.pid == (uint8_t)sm::pid::file_info){
 		rx_file_header_handler(rx_msg.payload,rx_msg.payload_length);
 	}else if(rx_msg.pid == (uint8_t)sm::pid::file_section){
@@ -450,18 +443,24 @@ bool rx_routing_handler(message_t &msg)
 			#endif
 			return true;
         }else if(msg.pid == (uint8_t)sm::pid::node_id_set){
-			LOG_DBG("received set node it");
+			printf("received set node id\n");
 			bool taken = take_node_id(msg,g_node_id);
 			if(taken){
+				printf("giving sem_id_set\n");
 				k_sem_give(&sem_id_set);//unleash the higher prio waiting for 'g_node_id'
 				json j;
 				j["rf_cmd"] = "sid";
 				j["sid"] = g_node_id;
 				mesh_bcast_json(j);
-				mesh_bcast_json(j);
 			}
 			return true;
-        }
+        }else if(msg.pid == (uint8_t)sm::pid::node_id_reset){
+			//this feature cannot be supported in single threaded apps like the simple_mesh_cli where main is blocked with console_getline()
+			LOG_DBG("rx node_id_reset calling mesh_request_node_id()");
+			//cannot call mesh_request_node_id() from same rx_thread due sem_id_set dead-lock
+			sys_reboot(SYS_REBOOT_WARM);//param unused on ARM-M
+			return true;
+		}
 	}
     else if(msg.dest == g_node_id){
 		LOG_DBG("dest == self (%d) for pid (%d)",g_node_id,msg.pid);
@@ -598,7 +597,7 @@ void sm_start()
 	if(mesh_request_node_id()){//with broadcast retries and sem waiting for 'set id'
 		if(g_coordinator){
 			g_coordinator = false;//request node id got acknowledged
-			printf("sm_start> no longer coordinator\n");
+			printf("sm_start> not coordinator\n");
 		}
 	}else{
 		if(g_coordinator){
@@ -614,7 +613,10 @@ void sm_start()
 			printf("sm_start> waiting for coordinator, short id [%d]\n",g_node_id);
 		}
 	}
-
+	if(g_coordinator){
+		k_sleep(K_MSEC(1));
+		mesh_bcast_packet(sm::pid::node_id_reset);
+	}
 }
 
 void sm_set_callback_rx_json(mesh_rx_json_handler_t rx_json_handler)
@@ -729,11 +731,14 @@ bool mesh_request_node_id()
 	bool success = false;
 	for(uint8_t i=0;i<g_retries;i++){
 		mesh_tx_message(&tx_msg);
+		int64_t start = k_uptime_ticks();
 		if(k_sem_take(&sem_id_set,K_MSEC(g_set_id_timeout_ms)) == 0){//result sscanf in g_node_id
-			printf("sm> obtained node id set to [%u]\n",g_node_id);
+			int64_t delta = k_uptime_ticks() - start;
+			printf("sm> obtained node id set to [%u] after %d us\n",g_node_id,k_ticks_to_us_floor32(delta));
 			return true;
 		}else{
-			printf("sm> sem_id_set timeout\n");
+			int64_t delta = k_uptime_ticks() - start;
+			printf("sm> sem_id_set timeout after %d us\n",k_ticks_to_us_floor32(delta));
 		}
 	}
 	printf("sm> id request retries out\n");
@@ -825,11 +830,13 @@ void sm_diag(json &data)
 		printf("sm> pinger ; rssi=-%d dBm; time = %d (1/%d ms)\n",rx_msg.rssi, (int)rx_timestamp,k_ms_to_ticks_floor32(1));
 	}else if(rf_cmd.compare("sid") == 0){
 		if(data.contains("sid")){
-			if((g_node_id != 0) && (data["sid"] != 0)){
-				g_node_id = data["sid"];
-			}else{
-				printf("sm> change of coordinator short id 0 not supported\n");
+			if(g_coordinator){//as someone else assigning ids coordinator roles is lost
+				printf("sm> dropped coordinator role as got assigned an id\n");
+				g_coordinator = false;
 			}
+			uint8_t prev_id = g_node_id;
+			g_node_id = data["sid"];
+			printf("sm> set node id updated (%d) -> (%d)\n",prev_id,g_node_id);
 		}
 		json rf_cmd_response;
 		rf_cmd_response["rf_cmd"] = "sid";
