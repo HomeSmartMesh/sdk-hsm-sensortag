@@ -554,6 +554,11 @@ int esb_initialize()
 		return err;
 	}
 
+	err = esb_set_tx_power(ESB_TX_POWER_4DBM);
+	if (err) {
+		return err;
+	}
+
 	LOG_INF("setting channel (%d) RF Freq %d MHz",CONFIG_SM_CHANNEL,2400+CONFIG_SM_CHANNEL);
     err = esb_set_rf_channel(CONFIG_SM_CHANNEL);
 	if (err) {
