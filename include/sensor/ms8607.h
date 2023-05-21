@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
-#include <device.h>
+#include <zephyr/device.h>
 
 // Enums
 

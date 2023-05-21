@@ -12,7 +12,7 @@
 #define MS8607_I2C_H_INCLUDED
 
 #include <stdint.h>
-#include <device.h>
+#include <zephyr/device.h>
 
 enum i2c_transfer_direction {
 	I2C_TRANSFER_WRITE = 0,

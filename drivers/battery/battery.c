@@ -1,9 +1,9 @@
 
-#include <zephyr.h>
-#include <device.h>
-#include <devicetree.h>
-#include <logging/log.h>
-#include <drivers/adc.h>
+#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/adc.h>
 
 LOG_MODULE_REGISTER(battery, LOG_LEVEL_INF);
 
@@ -13,7 +13,8 @@ LOG_MODULE_REGISTER(battery, LOG_LEVEL_INF);
 #define ADC_REFERENCE			ADC_REF_INTERNAL
 #define ADC_ACQUISITION_TIME	ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,40)
 
-const struct device *dev_adc;
+#define VBATT DT_PATH(vbatt)
+static const struct adc_dt_spec sAdc = ADC_DT_SPEC_GET(VBATT);
 static int16_t sample;
 int32_t adc_vref;
 struct adc_channel_cfg channel_cfg = {
@@ -39,21 +40,20 @@ struct adc_sequence sequence = {
 
 void battery_init()
 {
-	dev_adc = device_get_binding(DT_LABEL(DT_NODELABEL(adc)));
-	if (!device_is_ready(dev_adc)) {
+	if (!device_is_ready(sAdc.dev)) {
 		LOG_ERR("ADC device not found\n");
 		return;
 	}
 
-	adc_channel_setup(dev_adc, &channel_cfg);
-	adc_vref = adc_ref_internal(dev_adc);
+	adc_channel_setup_dt(&sAdc);
+	adc_vref = adc_ref_internal(sAdc.dev);
 
 	LOG_INF("battery_init() vref = %d",adc_vref);
 }
 
 void battery_start()
 {
-	int err = adc_read(dev_adc, &sequence);
+	int err = adc_read(sAdc.dev, &sequence);
 	if (err != 0) {
 		LOG_ERR("ADC reading failed with error %d.\n", err);
 		return;
