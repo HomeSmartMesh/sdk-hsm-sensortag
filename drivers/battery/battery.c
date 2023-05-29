@@ -7,28 +7,11 @@
 
 LOG_MODULE_REGISTER(battery, LOG_LEVEL_INF);
 
-#define ADC_CHANNEL				0
-#define ADC_RESOLUTION			12
-#define ADC_GAIN				ADC_GAIN_1_6
-#define ADC_REFERENCE			ADC_REF_INTERNAL
-#define ADC_ACQUISITION_TIME	ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,40)
-
-#define VBATT DT_PATH(vbatt)
-static const struct adc_dt_spec sAdc = ADC_DT_SPEC_GET(VBATT);
 static int16_t sample;
 int32_t adc_vref;
-struct adc_channel_cfg channel_cfg = {
-	.gain = ADC_GAIN,
-	.reference = ADC_REFERENCE,
-	.acquisition_time = ADC_ACQUISITION_TIME,
-	.channel_id = ADC_CHANNEL,
-	#ifdef CONFIG_ADC_CONFIGURABLE_INPUTS
-	.differential = 0,
-	.input_positive = SAADC_CH_PSELN_PSELN_VDD
-	#else
-	.differential = 0
-	#endif
-};
+
+static const struct adc_channel_cfg ch0_cfg_dt =
+    ADC_CHANNEL_CFG_DT(DT_CHILD(DT_NODELABEL(adc), channel_0));
 
 struct adc_sequence sequence = {
 	.channels    = BIT(ADC_CHANNEL),
@@ -40,20 +23,20 @@ struct adc_sequence sequence = {
 
 void battery_init()
 {
-	if (!device_is_ready(sAdc.dev)) {
+	if (!device_is_ready(dev_adc)) {
 		LOG_ERR("ADC device not found\n");
 		return;
 	}
 
-	adc_channel_setup_dt(&sAdc);
-	adc_vref = adc_ref_internal(sAdc.dev);
+	adc_channel_setup(dev_adc, &ch0_cfg_dt);
+	adc_vref = adc_ref_internal(dev_adc);
 
 	LOG_INF("battery_init() vref = %d",adc_vref);
 }
 
 void battery_start()
 {
-	int err = adc_read(sAdc.dev, &sequence);
+	int err = adc_read(dev_adc, &sequence);
 	if (err != 0) {
 		LOG_ERR("ADC reading failed with error %d.\n", err);
 		return;
