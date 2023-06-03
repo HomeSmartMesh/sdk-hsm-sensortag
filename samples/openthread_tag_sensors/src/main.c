@@ -8,7 +8,10 @@
 #include <zephyr/drivers/sensor.h>
 #include <sensor/veml6030.h>
 #include <sensor/ms8607.h>
+#include <zephyr/drivers/watchdog.h>
+#include <zephyr/sys/printk.h>
 //#include <battery.h>//TODO rework with VBATT app
+#include <zephyr/sys/reboot.h>
 
 #include <zephyr/net/openthread.h>
 #include <openthread/thread.h>
@@ -42,6 +45,25 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
 	#define gpio_pin_init()
 #endif
 
+#define WDT_MAX_WINDOW_MS  30000U
+#define WDT_MIN_WINDOW_MS  0U
+int wdt_channel_id;
+
+void start_watchdog(const struct device *const wdt){
+	struct wdt_timeout_cfg wdt_config = {
+		.flags = WDT_FLAG_RESET_SOC,
+		.window.min = WDT_MIN_WINDOW_MS,
+		.window.max = WDT_MAX_WINDOW_MS,
+	};
+
+	wdt_channel_id = wdt_install_timeout(wdt, &wdt_config);
+	if (wdt_channel_id < 0) {
+		printk("Watchdog install error\n");
+		return;
+	}
+	wdt_setup(wdt, WDT_OPT_PAUSE_HALTED_BY_DBG);
+}
+
 void main(void)
 {
 	gpio_pin_init();
@@ -53,6 +75,8 @@ void main(void)
 
 	//battery_init();
 	const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
+	const struct device *const wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0));
+	start_watchdog(wdt);
 	//getting the ms8607 is not needed due to the hardcoding of i2c adresses, multi instance is not possible
 	//const struct device *env_dev = device_get_binding(DT_LABEL(DT_INST(0, teconnectivity_ms8607)));
 	if(ms8607_is_connected()){
@@ -65,6 +89,7 @@ void main(void)
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	int count = 0;
 	while (1) {
+		wdt_feed(wdt, wdt_channel_id);
 		LOOP_SET;
 		LOG_INF("starting loop (%d)",count);
 		APP_SET;
@@ -95,6 +120,8 @@ void main(void)
 		count++;
 		LOOP_CLEAR;
 		k_sleep(K_MSEC(3000));
-
+		if(count == 150){
+			sys_reboot(SYS_REBOOT_WARM);
+		}
 	}
 }

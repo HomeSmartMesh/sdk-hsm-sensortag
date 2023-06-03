@@ -8,7 +8,7 @@ LOG_MODULE_REGISTER(udp_client, LOG_LEVEL_INF);
 
 bool udp_started = false;
 
-#define CONFIG_PEER_PORT 4242
+#define CONFIG_PEER_PORT 4141
 #if !defined(CONFIG_NET_CONFIG_PEER_IPV6_ADDR)
 #define CONFIG_NET_CONFIG_PEER_IPV6_ADDR "ff02::1"
 #endif

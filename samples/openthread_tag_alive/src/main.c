@@ -1,12 +1,12 @@
 
-#include <zephyr.h>
-#include <logging/log.h>
-#include <net/socket.h>
-#include <net/net_if.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/net/socket.h>
+#include <zephyr/net/net_if.h>
 #include <stdio.h>
-#include <drivers/gpio.h>
+#include <zephyr/drivers/gpio.h>
 
-#include <net/openthread.h>
+#include <zephyr/net/openthread.h>
 #include <openthread/thread.h>
 
 #include "hal/nrf_radio.h"
@@ -15,28 +15,6 @@
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #define SLEEP_TIME_MS   10000
-
-#define DEBUG_PIN_APP 	 2
-#define DEBUG_PIN_OS	29
-
-#define APP_SET 	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 1)	
-#define APP_CLEAR 	gpio_pin_set(gpio_dev, DEBUG_PIN_APP, 0)
-#define LOOP_SET 	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 1)
-#define LOOP_CLEAR 	gpio_pin_set(gpio_dev, DEBUG_PIN_OS, 0)
-
-const struct device *gpio_dev;
-void gpio_pin_init()
-{
-	gpio_dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
-	int ret = gpio_pin_configure(gpio_dev, DEBUG_PIN_APP, GPIO_OUTPUT_ACTIVE);
-	if (ret < 0) {
-		LOG_ERR("gpio_pin_configure() failed");
-	}
-	ret = gpio_pin_configure(gpio_dev, DEBUG_PIN_OS, GPIO_OUTPUT_ACTIVE);
-	if (ret < 0) {
-		LOG_ERR("gpio_pin_configure() failed");
-	}
-}
 
 void print_ot_info(otInstance *instance)
 {
@@ -70,14 +48,7 @@ void print_ot_info(otInstance *instance)
 
 void main(void)
 {
-	gpio_pin_init();
-	APP_CLEAR;
-	LOOP_CLEAR;
-	k_sleep(K_MSEC(10));
-
-	APP_SET;
-	k_sleep(K_MSEC(10));
-	APP_CLEAR;
+	k_sleep(K_MSEC(3000));
 
 	LOG_INF("Hello openthread udp");
 	k_sleep(K_MSEC(10));
@@ -93,22 +64,18 @@ void main(void)
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	int count = 0;
 	while (1) {
-		LOOP_SET;
 		LOG_INF("starting loop (%d)",count);
 		print_ot_info(openthread);
 		
 		char message[250];
 		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d}",id0,id1,count);
 
-		APP_SET;
 		send_udp(message, size);
-		APP_CLEAR;
 		k_sleep(K_MSEC(100));
 
 		printf("%s\n",message);
 		LOG_INF("sleeping 1 sec");
 		count++;
-		LOOP_CLEAR;
 		k_sleep(K_MSEC(3000));
 
 	}
