@@ -10,12 +10,12 @@
 #include <sensor/ms8607.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/sys/printk.h>
-//#include <battery.h>//TODO rework with VBATT app
 #include <zephyr/sys/reboot.h>
 
 #include <zephyr/net/openthread.h>
 #include <openthread/thread.h>
 
+//#include "app_battery.h"
 #include "udp_client.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
@@ -45,7 +45,13 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
 	#define gpio_pin_init()
 #endif
 
-#define WDT_MAX_WINDOW_MS  30000U
+#define RUN_CYCLE_MSEC 2000U
+#define SLEEP_CYCLE_MSEC 30000U
+
+//reboot every ~ 30 min
+#define REBOOT_CYCLES_COUNT 60
+
+#define WDT_MAX_WINDOW_MS  60000U
 #define WDT_MIN_WINDOW_MS  0U
 int wdt_channel_id;
 
@@ -119,8 +125,8 @@ void main(void)
 		LOG_INF("sleeping 1 sec");
 		count++;
 		LOOP_CLEAR;
-		k_sleep(K_MSEC(3000));
-		if(count == 150){
+		k_sleep(K_MSEC(SLEEP_CYCLE_MSEC));
+		if(count == REBOOT_CYCLES_COUNT){
 			sys_reboot(SYS_REBOOT_WARM);
 		}
 	}
