@@ -47,8 +47,9 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 	#define gpio_pin_init()
 #endif
 
-#define RUN_CYCLE_MSEC 2000U
-#define SLEEP_CYCLE_MSEC 10000U
+#define RUN_CYCLE_SEC 2U
+#define SLEEP_DISABLED_SEC 300U
+#define SLEEP_CYCLE_SEC 30U
 
 //reboot every ~ 30 min
 #define REBOOT_CYCLES_COUNT 60
@@ -56,6 +57,9 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #define WDT_MAX_WINDOW_MS  60000U
 #define WDT_MIN_WINDOW_MS  0U
 int wdt_channel_id;
+char uid_text[20];
+
+const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
 
 void start_watchdog(const struct device *const wdt){
 	struct wdt_timeout_cfg wdt_config = {
@@ -72,6 +76,34 @@ void start_watchdog(const struct device *const wdt){
 	wdt_setup(wdt, WDT_OPT_PAUSE_HALTED_BY_DBG);
 }
 
+void report_sensors(int count,bool send){
+	APP_SET;
+	//battery_start();
+	k_sleep(K_MSEC(10));
+	//int32_t voltage_mv = battery_get_mv();
+	//float voltage = voltage_mv;
+	//voltage /= 1000;
+	float light = veml6030_auto_measure(light_dev);
+	float t, p, h;
+	enum ms8607_status status = ms8607_read_temperature_pressure_humidity(&t,&p,&h);
+	if(status != ms8607_status_ok){
+		LOG_ERR("ms8607> status = %d",status);
+	}
+	APP_CLEAR;
+
+	char message[250];
+	//int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+	//							id0,id1,count, voltage, light, t, h, p);
+	int size = sprintf(message,"thread_tags/%s{\"alive\":%d,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+								uid_text,count, light, t, h, p);
+	if(send){
+		APP_SET;
+		send_udp(message, size);
+		APP_CLEAR;
+	}
+	LOG_INF("%s",message);
+}
+
 void main(void)
 {
 	gpio_pin_init();
@@ -82,7 +114,6 @@ void main(void)
 	LOG_INF("Hello Sensors Broadcast");
 
 	//battery_init();
-	const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
 	//const struct device *const wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0));
 	//start_watchdog(wdt);
 	app_ot_init();//logs joiner info and initializes reset buttons
@@ -96,41 +127,29 @@ void main(void)
 
 	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
+	sprintf(uid_text,"%04lX%04lX",id0,id1);
 	int count = 0;
 	while (1) {
 		//wdt_feed(wdt, wdt_channel_id);
 		LOOP_SET;
 		LOG_INF("starting loop (%d)",count);
-		APP_SET;
-		//battery_start();
-		k_sleep(K_MSEC(10));
-		//int32_t voltage_mv = battery_get_mv();
-		//float voltage = voltage_mv;
-		//voltage /= 1000;
-		float light = veml6030_auto_measure(light_dev);
-		float t, p, h;
-		enum ms8607_status status = ms8607_read_temperature_pressure_humidity(&t,&p,&h);
-		if(status != ms8607_status_ok){
-			LOG_ERR("ms8607> status = %d",status);
-		}
-		APP_CLEAR;
-		char message[250];
-		//int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-		//							id0,id1,count, voltage, light, t, h, p);
-		int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-									id0,id1,count, light, t, h, p);
-		
-		APP_SET;
-		send_udp(message, size);
-		APP_CLEAR;
 
-		LOG_INF("%s",message);
-		LOG_INF("sleeping 10 sec cout = %d",count);
+		otDeviceRole role = ot_app_role();
+		bool send = (role >= OT_DEVICE_ROLE_CHILD);
+		report_sensors(count,send);
+
+		if(role == OT_DEVICE_ROLE_DISABLED){
+			LOG_INF("role:disabled ; sleeping %d sec cout = %d",SLEEP_DISABLED_SEC,count);
+			k_sleep(K_MSEC(SLEEP_DISABLED_SEC*1000));
+			role = ot_app_role();
+			if(role == OT_DEVICE_ROLE_DISABLED){
+				sys_reboot(SYS_REBOOT_WARM);
+			}
+		}else{
+			LOG_INF("sleeping %d sec count = %d",SLEEP_CYCLE_SEC,count);
+			k_sleep(K_MSEC(SLEEP_CYCLE_SEC*1000));
+		}
 		count++;
 		LOOP_CLEAR;
-		k_sleep(K_MSEC(SLEEP_CYCLE_MSEC));
-		if(count == REBOOT_CYCLES_COUNT){
-			sys_reboot(SYS_REBOOT_WARM);
-		}
 	}
 }

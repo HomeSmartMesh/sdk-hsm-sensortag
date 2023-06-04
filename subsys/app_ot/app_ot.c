@@ -40,6 +40,8 @@ void get_eui64(char* eui64){
 int app_ot_init(void){
 	instance = otInstanceInitSingle();
 
+	otLinkSetMaxFrameRetriesDirect(instance,2);
+
 	//app_button_init();
 	//app_button_set_short_callback(click);
 	//app_button_set_long_callback(long_press);
@@ -53,4 +55,10 @@ int app_ot_init(void){
 	printk("https://dhrishi.github.io/connectedhomeip/qrcode.html?data=v%%3D1%%26%%26eui%%3D%s%%26%%26cc%%3D%s\n",eui64,OT_JOINER_PSKD);
 
 	return 0;
+}
+
+otDeviceRole ot_app_role(){
+	otDeviceRole role = otThreadGetDeviceRole(instance);
+	printk("role: %s\n",otThreadDeviceRoleToString(role));
+	return role;
 }
