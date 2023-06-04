@@ -17,8 +17,10 @@
 
 //#include "app_battery.h"
 #include "udp_client.h"
+#include "app_ot.h"
 
-LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
+
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 //#define CONFIG_GPIO_DEBUG
 #ifdef CONFIG_GPIO_DEBUG
 	#include <zephyr/drivers/gpio.h>
@@ -46,7 +48,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_NONE);
 #endif
 
 #define RUN_CYCLE_MSEC 2000U
-#define SLEEP_CYCLE_MSEC 30000U
+#define SLEEP_CYCLE_MSEC 10000U
 
 //reboot every ~ 30 min
 #define REBOOT_CYCLES_COUNT 60
@@ -81,8 +83,9 @@ void main(void)
 
 	//battery_init();
 	const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
-	const struct device *const wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0));
-	start_watchdog(wdt);
+	//const struct device *const wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0));
+	//start_watchdog(wdt);
+	app_ot_init();//logs joiner info and initializes reset buttons
 	//getting the ms8607 is not needed due to the hardcoding of i2c adresses, multi instance is not possible
 	//const struct device *env_dev = device_get_binding(DT_LABEL(DT_INST(0, teconnectivity_ms8607)));
 	if(ms8607_is_connected()){
@@ -95,7 +98,7 @@ void main(void)
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	int count = 0;
 	while (1) {
-		wdt_feed(wdt, wdt_channel_id);
+		//wdt_feed(wdt, wdt_channel_id);
 		LOOP_SET;
 		LOG_INF("starting loop (%d)",count);
 		APP_SET;
@@ -121,8 +124,8 @@ void main(void)
 		send_udp(message, size);
 		APP_CLEAR;
 
-		printf("%s\n",message);
-		LOG_INF("sleeping 1 sec");
+		LOG_INF("%s",message);
+		LOG_INF("sleeping 10 sec cout = %d",count);
 		count++;
 		LOOP_CLEAR;
 		k_sleep(K_MSEC(SLEEP_CYCLE_MSEC));
