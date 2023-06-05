@@ -135,8 +135,8 @@ void main(void)
 		LOG_INF("starting loop (%d)",count);
 
 		otDeviceRole role = ot_app_role();
-		bool send = (role >= OT_DEVICE_ROLE_CHILD);
-		report_sensors(count,send);
+		//bool send = (role >= OT_DEVICE_ROLE_CHILD);
+		report_sensors(count,true);
 
 		if(role == OT_DEVICE_ROLE_DISABLED){
 			LOG_INF("role:disabled ; sleeping %d sec cout = %d",SLEEP_DISABLED_SEC,count);
