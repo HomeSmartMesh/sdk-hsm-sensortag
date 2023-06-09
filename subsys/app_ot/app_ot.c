@@ -37,11 +37,25 @@ void get_eui64(char* eui64){
 	eui64[16] = '\0';
 }
 
+void get_ext_address(char* ext_addr){
+	const otExtAddress* add = otLinkGetExtendedAddress(instance);
+	for(int i=0;i<8;i++){
+		sprintf(ext_addr+=2,"%02X",add->m8[i]);
+	}
+	ext_addr[16] = '\0';
+}
+
 int app_ot_init(void){
+
+	printk("app_ot_init() start\n");
 	instance = otInstanceInitSingle();
 
-	otLinkSetMaxFrameRetriesDirect(instance,2);
+	char ext_addr[17];
+	get_ext_address(ext_addr);
+	printk("Extended address: %s\n",ext_addr);
 
+	otLinkSetMaxFrameRetriesDirect(instance,2);
+	//otThreadSetEnabled(instance,true);;
 	//app_button_init();
 	//app_button_set_short_callback(click);
 	//app_button_set_long_callback(long_press);
@@ -54,11 +68,23 @@ int app_ot_init(void){
 	printk("qrcode: v=1&&eui=%s&&cc=%s\n",eui64,OT_JOINER_PSKD);
 	printk("https://dhrishi.github.io/connectedhomeip/qrcode.html?data=v%%3D1%%26%%26eui%%3D%s%%26%%26cc%%3D%s\n",eui64,OT_JOINER_PSKD);
 
+	printk("app_ot_init() done\n");
 	return 0;
 }
 
 otDeviceRole ot_app_role(){
+	
 	otDeviceRole role = otThreadGetDeviceRole(instance);
 	printk("role: %s\n",otThreadDeviceRoleToString(role));
+
+	otLinkModeConfig linkMode = otThreadGetLinkMode(instance);
+	printk("LinkMode ; %s , %s, %s \n",
+		linkMode.mRxOnWhenIdle?"RxIdle":"no RxIdle",
+		linkMode.mDeviceType?"FTD":"not FTD",
+		linkMode.mNetworkData?"NetData":"No NetData");
+
+	uint8_t channel = otLinkGetChannel(instance);
+	printk("channel : %u\n",channel);
 	return role;
+
 }

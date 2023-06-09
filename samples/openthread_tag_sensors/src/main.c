@@ -116,7 +116,9 @@ void main(void)
 	//battery_init();
 	//const struct device *const wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0));
 	//start_watchdog(wdt);
+	k_sleep(K_MSEC(1000));
 	app_ot_init();//logs joiner info and initializes reset buttons
+	k_sleep(K_MSEC(1000));
 	//getting the ms8607 is not needed due to the hardcoding of i2c adresses, multi instance is not possible
 	//const struct device *env_dev = device_get_binding(DT_LABEL(DT_INST(0, teconnectivity_ms8607)));
 	if(ms8607_is_connected()){
