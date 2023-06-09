@@ -48,7 +48,7 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #endif
 
 #define RUN_CYCLE_SEC 2U
-#define SLEEP_DISABLED_SEC 300U
+#define SLEEP_DISABLED_SEC 30U
 #define SLEEP_CYCLE_SEC 30U
 
 //reboot every ~ 30 min
@@ -138,7 +138,8 @@ void main(void)
 		//bool send = (role >= OT_DEVICE_ROLE_CHILD);
 		report_sensors(count,true);
 
-		if(role == OT_DEVICE_ROLE_DISABLED){
+		//if(role == OT_DEVICE_ROLE_DISABLED){
+		if(false){
 			LOG_INF("role:disabled ; sleeping %d sec cout = %d",SLEEP_DISABLED_SEC,count);
 			k_sleep(K_MSEC(SLEEP_DISABLED_SEC*1000));
 			role = ot_app_role();

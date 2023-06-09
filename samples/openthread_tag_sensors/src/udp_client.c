@@ -10,7 +10,7 @@ bool udp_started = false;
 
 #define CONFIG_PEER_PORT 4141
 #if !defined(CONFIG_NET_CONFIG_PEER_IPV6_ADDR)
-#define CONFIG_NET_CONFIG_PEER_IPV6_ADDR "ff02::1"
+#define CONFIG_NET_CONFIG_PEER_IPV6_ADDR "ff03::1"
 #endif
 #define INVALID_SOCK (-1)
 
