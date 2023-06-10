@@ -57,7 +57,7 @@ void button_interrupt(const struct device *dev, struct gpio_callback *cb, uint32
 		triggered = false;
 		booting = false;
 		k_work_reschedule(&long_press_work, LONG_PRESS_TIMEOUT);
-		printk("Button pressed at %" PRIi64, press_time);
+		printk("Button pressed at %" PRIi64 " \n", press_time);
 	}
 	else{//released
 		if(booting){
@@ -72,7 +72,7 @@ void button_interrupt(const struct device *dev, struct gpio_callback *cb, uint32
 						button_short_press();
 					}
 				}else{
-					printk("Button released after %" PRIi64 " ms - not short, not long", time);
+					printk("Button released after %" PRIi64 " ms - not short, not long\n", time);
 				}
 				k_work_cancel_delayable(&long_press_work);
 			}//else triggered, nothing to do, release after trigger
@@ -108,7 +108,7 @@ int app_button_init(void){
 
 	gpio_init_callback(&button_cb_data, button_interrupt, BIT(button.pin));
 	gpio_add_callback(button.port, &button_cb_data);
-	printk("Set up button at %s pin %d", button.port->name, button.pin);
+	printk("Set up button at %s pin %d\n", button.port->name, button.pin);
 
 	return ret;
 }

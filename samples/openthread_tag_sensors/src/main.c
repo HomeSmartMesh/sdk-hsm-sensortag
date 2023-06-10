@@ -8,7 +8,6 @@
 #include <zephyr/drivers/sensor.h>
 #include <sensor/veml6030.h>
 #include <sensor/ms8607.h>
-#include <zephyr/drivers/watchdog.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/reboot.h>
 
@@ -48,33 +47,16 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #endif
 
 #define RUN_CYCLE_SEC 2U
-#define SLEEP_DISABLED_SEC 30U
+#define SLEEP_DETACHED_SEC 40U
 #define SLEEP_CYCLE_SEC 30U
 
 //reboot every ~ 30 min
 #define REBOOT_CYCLES_COUNT 60
 
-#define WDT_MAX_WINDOW_MS  60000U
-#define WDT_MIN_WINDOW_MS  0U
-int wdt_channel_id;
 char uid_text[20];
 
 const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
 
-void start_watchdog(const struct device *const wdt){
-	struct wdt_timeout_cfg wdt_config = {
-		.flags = WDT_FLAG_RESET_SOC,
-		.window.min = WDT_MIN_WINDOW_MS,
-		.window.max = WDT_MAX_WINDOW_MS,
-	};
-
-	wdt_channel_id = wdt_install_timeout(wdt, &wdt_config);
-	if (wdt_channel_id < 0) {
-		printk("Watchdog install error\n");
-		return;
-	}
-	wdt_setup(wdt, WDT_OPT_PAUSE_HALTED_BY_DBG);
-}
 
 void report_sensors(int count,bool send){
 	APP_SET;
@@ -114,8 +96,6 @@ void main(void)
 	LOG_INF("Hello Sensors Broadcast");
 
 	//battery_init();
-	//const struct device *const wdt = DEVICE_DT_GET(DT_ALIAS(watchdog0));
-	//start_watchdog(wdt);
 	k_sleep(K_MSEC(1000));
 	app_ot_init();//logs joiner info and initializes reset buttons
 	k_sleep(K_MSEC(1000));
@@ -132,20 +112,20 @@ void main(void)
 	sprintf(uid_text,"%04lX%04lX",id0,id1);
 	int count = 0;
 	while (1) {
-		//wdt_feed(wdt, wdt_channel_id);
 		LOOP_SET;
 		LOG_INF("starting loop (%d)",count);
 
 		otDeviceRole role = ot_app_role();
-		//bool send = (role >= OT_DEVICE_ROLE_CHILD);
-		report_sensors(count,true);
+		bool send = (role >= OT_DEVICE_ROLE_CHILD);
+		report_sensors(count,send);
 
-		//if(role == OT_DEVICE_ROLE_DISABLED){
-		if(false){
-			LOG_INF("role:disabled ; sleeping %d sec cout = %d",SLEEP_DISABLED_SEC,count);
-			k_sleep(K_MSEC(SLEEP_DISABLED_SEC*1000));
+		if(role <= OT_DEVICE_ROLE_DETACHED){
+			LOG_INF("role: %s; sleeping %d sec cout = %d",
+				(role == OT_DEVICE_ROLE_DISABLED)?"Disabled":"Detached",
+				SLEEP_DETACHED_SEC,count);
+			k_sleep(K_MSEC(SLEEP_DETACHED_SEC*1000));
 			role = ot_app_role();
-			if(role == OT_DEVICE_ROLE_DISABLED){
+			if(role <= OT_DEVICE_ROLE_DISABLED){
 				sys_reboot(SYS_REBOOT_WARM);
 			}
 		}else{
