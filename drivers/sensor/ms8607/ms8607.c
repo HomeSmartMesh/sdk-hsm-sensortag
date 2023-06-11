@@ -17,11 +17,11 @@ extern "C" {
 
 #define DT_DRV_COMPAT teconnectivity_ms8607
 
-#include <device.h>
-#include <drivers/i2c.h>
-#include <drivers/sensor.h>
-#include <sys/__assert.h>
-#include <logging/log.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/logging/log.h>
 #include <stdio.h>
 #include <sensor/ms8607.h>
 
@@ -175,9 +175,9 @@ int ms8607_init(const struct device *dev)
 	//LOG_INF("ms8607_init()");
 	struct ms8607_data *drv_data;
     drv_data = dev->data;
-	drv_data->i2c = device_get_binding(DT_INST_BUS_LABEL(0));
+	drv_data->i2c =  DEVICE_DT_GET(DT_INST_BUS(0));
 	if (drv_data->i2c == NULL) {
-		//LOG_ERR("Failed to get pointer to %s device!",DT_INST_BUS_LABEL(0));
+		//LOG_ERR("Failed to get pointer to %s device!",DEVICE_DT_GET(DT_INST_BUS(0));
 	}
 	/* Initialize and enable device with config. */
 	i2c_master_init(dev);
@@ -210,7 +210,7 @@ static const struct sensor_driver_api ms8607_driver_api = {
 };
 static struct ms8607_data ms8607_drv_data;
 
-DEVICE_DT_INST_DEFINE(0, ms8607_init, device_pm_control_nop,
+DEVICE_DT_INST_DEFINE(0, ms8607_init, NULL,
 	    &ms8607_drv_data, NULL, POST_KERNEL,
 	    CONFIG_SENSOR_INIT_PRIORITY, &ms8607_driver_api);
 

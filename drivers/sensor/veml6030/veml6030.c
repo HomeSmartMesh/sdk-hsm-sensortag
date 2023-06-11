@@ -1,10 +1,10 @@
 #define DT_DRV_COMPAT vishay_veml6030
 
-#include <device.h>
-#include <drivers/i2c.h>
-#include <drivers/sensor.h>
-#include <sys/__assert.h>
-#include <logging/log.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/i2c.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/logging/log.h>
 #include <stdio.h>
 
 #include <sensor/veml6030.h>
@@ -248,9 +248,9 @@ int veml6030_init(const struct device *dev)
 {
 	struct veml6030_data *drv_data = dev->data;
 	LOG_INF("veml6030_init()");
-	drv_data->i2c = device_get_binding(DT_INST_BUS_LABEL(0));
+	drv_data->i2c = DEVICE_DT_GET(DT_INST_BUS(0));
 	if (drv_data->i2c == NULL) {
-		LOG_ERR("Failed to get pointer to %s device!",DT_INST_BUS_LABEL(0));
+		LOG_ERR("Failed to get pointer to %s device!",DEVICE_DT_GET(DT_INST_BUS(0)));
 		return -EINVAL;
 	}
 
@@ -259,7 +259,7 @@ int veml6030_init(const struct device *dev)
 
 static struct veml6030_data veml6030_drv_data;
 
-DEVICE_DT_INST_DEFINE(0, veml6030_init, device_pm_control_nop,
+DEVICE_DT_INST_DEFINE(0, veml6030_init, NULL,
 	    &veml6030_drv_data, NULL, POST_KERNEL,
 	    CONFIG_SENSOR_INIT_PRIORITY, &veml6030_driver_api);
 

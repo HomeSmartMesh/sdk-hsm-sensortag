@@ -1,9 +1,11 @@
 manifest:
-  version: 0.9
+  version: "0.12"
   remotes:
     # Home Smart Mesh GitHub organization.
     - name: hsm
       url-base: https://github.com/HomeSmartMesh
+    - name: ncs
+      url-base: https://github.com/nrfconnect
     - name: zephyrproject
       url-base: https://github.com/zephyrproject-rtos
 
@@ -11,12 +13,22 @@ manifest:
     remote: hsm
 
   projects:
+    - name: nrf
+      remote: ncs
+      repo-path: sdk-nrf
+      revision: v2.3.0
+      path: nrf
+    - name: nrfxlib
+      remote: ncs
+      repo-path: sdk-nrfxlib
+      path: nrfxlib
+      revision: v2.3.0
     - name: zephyr
-      repo-path: zephyr
-      remote: zephyrproject
-      revision: 79a6c07536bc14583198f8e3555df6134d8822cf
+      remote: ncs
+      repo-path: sdk-zephyr
+      revision: v3.2.99-ncs2
       import:
-        name-whitelist:
+        name-allowlist:
           - cmsis
           - edtt
           - fatfs
@@ -24,19 +36,29 @@ manifest:
           - libmetal
           - littlefs
           - lvgl
-          - mbedtls
-          - mcumgr
           - mipi-sys-t
           - net-tools
           - nrf_hw_models
+          - open-amp
           - openthread
           - segger
           - tinycrypt
-
-    - name: pcb
-      repo-path: nrf52_thread_sensortag
-      revision: 80a0005e6461b9365d0f505c78637d77acf1a327
-      path: pcb
+    - name: openthread
+      remote: ncs
+      repo-path: sdk-openthread
+      path: modules/lib/openthread
+      revision: 2060039bbfec52ac00f22a7cc3213c2ab1df138e
+    - name: mcuboot
+      remote: ncs
+      repo-path: sdk-mcuboot
+      revision: v1.9.99-ncs4
+      path: bootloader/mcuboot
+    - name: mbedtls
+      remote: ncs
+      path: modules/crypto/mbedtls
+      repo-path: sdk-mbedtls
+      revision: v3.1.0-ncs3
 
   self:
     path: hsm
+    west-commands: nrf/scripts/west-commands.yml

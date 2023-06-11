@@ -1,0 +1,6 @@
+menuconfig APP_OT
+	bool "Application Open Thread Management"
+	default n
+	depends on NET_L2_OPENTHREAD
+	help
+	  Enable Application Open Thread API for printing joiner info, button reset and factory reset.

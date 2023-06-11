@@ -1,16 +1,16 @@
 //zephyr\samples\net\sockets\echo_client\src\udp.c
-#include <zephyr.h>
-#include <logging/log.h>
-#include <net/socket.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/net/socket.h>
 #include <stdio.h>
 
 LOG_MODULE_REGISTER(udp_client, LOG_LEVEL_INF);
 
 bool udp_started = false;
 
-#define CONFIG_PEER_PORT 4242
+#define CONFIG_PEER_PORT 4141
 #if !defined(CONFIG_NET_CONFIG_PEER_IPV6_ADDR)
-#define CONFIG_NET_CONFIG_PEER_IPV6_ADDR "ff02::1"
+#define CONFIG_NET_CONFIG_PEER_IPV6_ADDR "ff03::1"
 #endif
 #define INVALID_SOCK (-1)
 

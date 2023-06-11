@@ -6,3 +6,5 @@
 
 add_subdirectory_ifdef(CONFIG_ESB		    esb)
 add_subdirectory_ifdef(CONFIG_SIMPLEMESH	simplemesh)
+add_subdirectory_ifdef(CONFIG_APP_BATTERY   app_battery)
+add_subdirectory_ifdef(CONFIG_APP_OT app_ot)

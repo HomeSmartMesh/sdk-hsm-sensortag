@@ -1,7 +1,7 @@
 #ifndef ZEPHYR_DRIVERS_SENSOR_VEML6030_VEML6030_H_
 #define ZEPHYR_DRIVERS_SENSOR_VEML6030_VEML6030_H_
 
-#include <sys/util.h>
+#include <zephyr/sys/util.h>
 
 #define VEML6030_I2C_ADDRESS	DT_INST_REG_ADDR(0)
 
