@@ -14,7 +14,7 @@
 #include <zephyr/net/openthread.h>
 #include <openthread/thread.h>
 
-//#include "app_battery.h"
+#include "app_battery.h"
 #include "udp_client.h"
 #include "app_ot.h"
 
@@ -60,11 +60,9 @@ const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
 
 void report_sensors(int count,bool send){
 	APP_SET;
-	//battery_start();
-	k_sleep(K_MSEC(10));
-	//int32_t voltage_mv = battery_get_mv();
-	//float voltage = voltage_mv;
-	//voltage /= 1000;
+	int32_t voltage_mv = app_battery_voltage_mv();
+	float voltage = voltage_mv;
+	voltage /= 1000;
 	float light = veml6030_auto_measure(light_dev);
 	float t, p, h;
 	enum ms8607_status status = ms8607_read_temperature_pressure_humidity(&t,&p,&h);
@@ -74,10 +72,10 @@ void report_sensors(int count,bool send){
 	APP_CLEAR;
 
 	char message[250];
-	//int size = sprintf(message,"thread_tags/%04lX%04lX{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-	//							id0,id1,count, voltage, light, t, h, p);
-	int size = sprintf(message,"thread_tags/%s{\"alive\":%d,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-								uid_text,count, light, t, h, p);
+	int size = sprintf(message,"thread_tags/%s{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+								uid_text,count, voltage, light, t, h, p);
+	//int size = sprintf(message,"thread_tags/%s{\"alive\":%d,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+	//							uid_text,count, light, t, h, p);
 	if(send){
 		APP_SET;
 		send_udp(message, size);
@@ -95,7 +93,7 @@ void main(void)
 
 	LOG_INF("Hello Sensors Broadcast");
 
-	//battery_init();
+	app_battery_init();
 	k_sleep(K_MSEC(1000));
 	app_ot_init();//logs joiner info and initializes reset buttons
 	k_sleep(K_MSEC(1000));
