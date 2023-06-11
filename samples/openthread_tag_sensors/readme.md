@@ -16,6 +16,9 @@ commissioner start
 commissioner joiner add * ABCDE2 3600
 ```
 
+for a CLI dongle, a dataset is needed, see https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/protocols/thread/overview/commissioning.html#setting-up-the-commissioner
+
+
 ## Documentation
 https://www.homesmartmesh.com/docs/microcontrollers/nrf52/thread_sensortag/#tag_sensors_broadcast
 

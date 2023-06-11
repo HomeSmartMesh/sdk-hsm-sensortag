@@ -11,6 +11,10 @@
 / {
 	model = "nrf52840 Sensor Tag";
 	compatible = "homesmartmesh,nrf52840_sensortag";
+	
+	zephyr,user {
+		io-channels = <&adc 0>;
+	};
 
 	chosen {
 		zephyr,console = &uart0;
@@ -64,13 +68,6 @@
 		};
 	};
 
-	vbatt {
-		compatible = "voltage-divider";
-		io-channels = <&adc 0>;
-		output-ohms = <180000>;
-		full-ohms = <(1500000 + 180000)>;
-	};
-
 	/* These aliases are provided for compatibility with samples */
 	aliases {
 		led0 = &led0;
@@ -86,6 +83,17 @@
 
 &adc {
 	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_6";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 40)>;
+		zephyr,input-positive = <NRF_SAADC_VDD>;
+		zephyr,resolution = <12>;
+   };
 };
 
 &gpiote {

@@ -6,5 +6,4 @@
 
 rsource "esb/Kconfig"
 rsource "simplemesh/Kconfig"
-rsource "app_battery/Kconfig"
 rsource "app_ot/Kconfig"

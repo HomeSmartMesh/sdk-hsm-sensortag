@@ -14,7 +14,7 @@
 #include <zephyr/net/openthread.h>
 #include <openthread/thread.h>
 
-#include "app_battery.h"
+#include "battery.h"
 #include "udp_client.h"
 #include "app_ot.h"
 
@@ -46,12 +46,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 	#define gpio_pin_init()
 #endif
 
-#define RUN_CYCLE_SEC 2U
 #define SLEEP_DETACHED_SEC 40U
 #define SLEEP_CYCLE_SEC 30U
-
-//reboot every ~ 30 min
-#define REBOOT_CYCLES_COUNT 60
 
 char uid_text[20];
 
@@ -60,7 +56,9 @@ const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
 
 void report_sensors(int count,bool send){
 	APP_SET;
-	int32_t voltage_mv = app_battery_voltage_mv();
+	battery_start();
+	k_sleep(K_MSEC(10));
+	int32_t voltage_mv = battery_get_mv();
 	float voltage = voltage_mv;
 	voltage /= 1000;
 	float light = veml6030_auto_measure(light_dev);
@@ -74,8 +72,6 @@ void report_sensors(int count,bool send){
 	char message[250];
 	int size = sprintf(message,"thread_tags/%s{\"alive\":%d,\"voltage\":%.3f,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
 								uid_text,count, voltage, light, t, h, p);
-	//int size = sprintf(message,"thread_tags/%s{\"alive\":%d,\"light\":%0.3f,\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
-	//							uid_text,count, light, t, h, p);
 	if(send){
 		APP_SET;
 		send_udp(message, size);
@@ -93,7 +89,7 @@ void main(void)
 
 	LOG_INF("Hello Sensors Broadcast");
 
-	app_battery_init();
+	battery_init();
 	k_sleep(K_MSEC(1000));
 	app_ot_init();//logs joiner info and initializes reset buttons
 	k_sleep(K_MSEC(1000));
