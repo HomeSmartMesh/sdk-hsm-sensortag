@@ -250,7 +250,7 @@ int veml6030_init(const struct device *dev)
 	LOG_INF("veml6030_init()");
 	drv_data->i2c = DEVICE_DT_GET(DT_INST_BUS(0));
 	if (drv_data->i2c == NULL) {
-		LOG_ERR("Failed to get pointer to %s device!",DEVICE_DT_GET(DT_INST_BUS(0)));
+		LOG_ERR("Failed to get pointer to %s device!",drv_data->i2c->name);
 		return -EINVAL;
 	}
 
