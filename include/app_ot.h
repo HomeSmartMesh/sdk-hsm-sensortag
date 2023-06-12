@@ -11,6 +11,7 @@ extern "C" {
 
 int app_ot_init(void);
 otDeviceRole ot_app_role();
+void quick_reboot_factoryreset();
 
 #ifdef __cplusplus
 }

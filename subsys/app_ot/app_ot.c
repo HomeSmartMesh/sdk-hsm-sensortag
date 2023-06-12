@@ -31,6 +31,10 @@ void long_press(){
 	sys_reboot(SYS_REBOOT_COLD);
 }
 
+void quick_reboot_factoryreset(){
+	long_press();
+}
+
 void get_eui64(char* eui64){
 	otInstance* instance = openthread_get_default_instance();
 	otExtAddress aEui64;
@@ -62,11 +66,11 @@ int app_ot_init(void){
 	printk("Extended address: '%s'\n",ext_addr);
 
 	otLinkSetMaxFrameRetriesDirect(instance,2);
-	app_button_init();
-	app_button_set_short_callback(click);
-	app_button_set_long_callback(long_press);
-	app_button_set_short_timeout(1000);
-	app_button_set_long_timeout(4000);
+	//app_button_init();
+	//app_button_set_short_callback(click);
+	//app_button_set_long_callback(long_press);
+	//app_button_set_short_timeout(1000);
+	//app_button_set_long_timeout(4000);
 
 	char eui64[17];
 	get_eui64(eui64);
