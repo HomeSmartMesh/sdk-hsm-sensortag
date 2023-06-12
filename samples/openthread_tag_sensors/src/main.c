@@ -17,6 +17,7 @@
 #include "battery.h"
 #include "udp_client.h"
 #include "app_ot.h"
+#include "flash_settings_storage.h"
 
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
@@ -48,6 +49,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #define SLEEP_DETACHED_SEC 40U
 #define SLEEP_CYCLE_SEC 30U
+
+#define SLEEP_QUICK_REBOOT_SEC 3U
 
 char uid_text[20];
 
@@ -82,6 +85,21 @@ void report_sensors(int count,bool send){
 
 void main(void)
 {
+	//   ---    handle quick reboot   ---
+	uint32_t quick_rebout_count;
+	fss_read_word(&quick_rebout_count);
+	LOG_INF("Quick reboot count:%u",quick_rebout_count);
+	if(quick_rebout_count == 2){
+		LOG_INF("Quick reboot count limit reached - reset counter");
+		quick_rebout_count = 0;
+		fss_write_word(&quick_rebout_count);
+		LOG_INF("Performing factory reset");
+		k_sleep(K_MSEC(1000));
+		quick_reboot_factoryreset();
+	}
+	quick_rebout_count++;
+	fss_write_word(&quick_rebout_count);
+
 	gpio_pin_init();
 	APP_CLEAR;
 	LOOP_CLEAR;
@@ -90,9 +108,7 @@ void main(void)
 	LOG_INF("Hello Sensors Broadcast");
 
 	battery_init();
-	k_sleep(K_MSEC(1000));
 	app_ot_init();//logs joiner info and initializes reset buttons
-	k_sleep(K_MSEC(1000));
 	//getting the ms8607 is not needed due to the hardcoding of i2c adresses, multi instance is not possible
 	//const struct device *env_dev = device_get_binding(DT_LABEL(DT_INST(0, teconnectivity_ms8607)));
 	if(ms8607_is_connected()){
@@ -104,6 +120,18 @@ void main(void)
 	long unsigned int id0 = NRF_FICR->DEVICEID[0];//just for type casting and readable printing
 	long unsigned int id1 = NRF_FICR->DEVICEID[1];
 	sprintf(uid_text,"%04lX%04lX",id0,id1);
+	LOG_INF("Device ID:%s",uid_text);
+
+	//long unsigned int abs_reboot = NRF_UICR->CUSTOMER[0];
+	//abs_reboot++;
+	//NRF_UICR->CUSTOMER[0] = abs_reboot;
+	//LOG_INF("Abs reboot count (CUSTOMER[0]):%08lX",abs_reboot);
+
+	k_sleep(K_MSEC(SLEEP_QUICK_REBOOT_SEC*1000));
+	//after SLEEP_QUICK_REBOOT_SEC, disable quick reboot
+	quick_rebout_count = 0;
+	fss_write_word(&quick_rebout_count);
+
 	int count = 0;
 	while (1) {
 		LOOP_SET;

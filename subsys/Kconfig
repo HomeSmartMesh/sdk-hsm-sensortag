@@ -7,3 +7,4 @@
 rsource "esb/Kconfig"
 rsource "simplemesh/Kconfig"
 rsource "app_ot/Kconfig"
+rsource "app_flash/Kconfig"

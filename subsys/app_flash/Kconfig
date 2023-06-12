@@ -1,0 +1,6 @@
+menuconfig APP_FLASH
+	bool "Application read write flash"
+	default n
+	depends on FLASH
+	help
+	  Enable Application read write flash.
