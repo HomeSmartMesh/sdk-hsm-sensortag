@@ -18,6 +18,7 @@
 #include "udp_client.h"
 #include "app_ot.h"
 #include "flash_settings_storage.h"
+#include "app_led.h"
 
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
@@ -52,6 +53,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #define SLEEP_QUICK_REBOOT_SEC 3U
 
+#define LED_PWM_RATIO 0.01
+
 char uid_text[20];
 
 const struct device *light_dev = DEVICE_DT_GET_ONE(vishay_veml6030);
@@ -85,6 +88,7 @@ void report_sensors(int count,bool send){
 
 void main(void)
 {
+	app_led_init();
 	//   ---    handle quick reboot   ---
 	uint32_t quick_rebout_count;
 	fss_read_word(&quick_rebout_count);
@@ -94,7 +98,10 @@ void main(void)
 		quick_rebout_count = 0;
 		fss_write_word(&quick_rebout_count);
 		LOG_INF("Performing factory reset");
-		k_sleep(K_MSEC(1000));
+		k_sleep(K_MSEC(500));
+		app_led_blink_blue(LED_PWM_RATIO,100,500);
+		app_led_blink_blue(LED_PWM_RATIO,100,500);
+		app_led_blink_blue(LED_PWM_RATIO,100,500);
 		quick_reboot_factoryreset();
 	}
 	quick_rebout_count++;
@@ -109,6 +116,11 @@ void main(void)
 
 	battery_init();
 	app_ot_init();//logs joiner info and initializes reset buttons
+	//signal that now buttons can be pressed
+	k_sleep(K_MSEC(100));
+	app_led_blink_red(LED_PWM_RATIO,100,100);
+	app_led_blink_green(LED_PWM_RATIO,100,100);
+	app_led_blink_blue(LED_PWM_RATIO,100,100);
 	//getting the ms8607 is not needed due to the hardcoding of i2c adresses, multi instance is not possible
 	//const struct device *env_dev = device_get_binding(DT_LABEL(DT_INST(0, teconnectivity_ms8607)));
 	if(ms8607_is_connected()){
@@ -131,6 +143,10 @@ void main(void)
 	//after SLEEP_QUICK_REBOOT_SEC, disable quick reboot
 	quick_rebout_count = 0;
 	fss_write_word(&quick_rebout_count);
+	k_sleep(K_MSEC(100));
+	app_led_blink_red(LED_PWM_RATIO,100,100);
+	app_led_blink_green(LED_PWM_RATIO,100,100);
+	app_led_blink_blue(LED_PWM_RATIO,100,100);
 
 	int count = 0;
 	while (1) {
@@ -142,15 +158,21 @@ void main(void)
 		report_sensors(count,send);
 
 		if(role <= OT_DEVICE_ROLE_DETACHED){
+			app_led_blink_blue(LED_PWM_RATIO,100,100);
+			app_led_blink_blue(LED_PWM_RATIO,100,100);
 			LOG_INF("role: %s; sleeping %d sec cout = %d",
 				(role == OT_DEVICE_ROLE_DISABLED)?"Disabled":"Detached",
 				SLEEP_DETACHED_SEC,count);
 			k_sleep(K_MSEC(SLEEP_DETACHED_SEC*1000));
 			role = ot_app_role();
 			if(role <= OT_DEVICE_ROLE_DISABLED){
+				app_led_blink_red(LED_PWM_RATIO,100,100);
+				app_led_blink_red(LED_PWM_RATIO,100,100);
+				app_led_blink_red(LED_PWM_RATIO,100,100);
 				sys_reboot(SYS_REBOOT_WARM);
 			}
 		}else{
+			app_led_blink_green(LED_PWM_RATIO,100,100);
 			LOG_INF("sleeping %d sec count = %d",SLEEP_CYCLE_SEC,count);
 			k_sleep(K_MSEC(SLEEP_CYCLE_SEC*1000));
 		}
