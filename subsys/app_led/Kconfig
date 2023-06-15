@@ -1,0 +1,6 @@
+menuconfig APP_LED
+	bool "Application LED API"
+	default n
+	depends on PWM
+	help
+	  Enable Application RGB LED API for state, color, blink.
