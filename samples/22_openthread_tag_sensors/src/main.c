@@ -18,8 +18,14 @@
 #include "udp_client.h"
 #include "app_ot.h"
 #include "flash_settings_storage.h"
-#include "app_led.h"
-
+#ifdef CONFIG_APP_LED
+	#include "app_led.h"
+#else
+	#define app_led_init()
+	#define app_led_blink_blue(...)
+	#define app_led_blink_red(...)
+	#define app_led_blink_green(...)
+#endif
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 //#define CONFIG_GPIO_DEBUG
