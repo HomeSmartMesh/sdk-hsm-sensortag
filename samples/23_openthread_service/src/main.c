@@ -137,7 +137,7 @@ static void ms8607_handler(void *context, otMessage *message, const otMessageInf
     float t, p, h;
     enum ms8607_status status = ms8607_read_temperature_pressure_humidity(&t, &p, &h);
     char content[100];
-    int n = sprintf(content,"{\"device_id\":\"%s\", \"temperature\":%.3f, \"pressure\":\"\", \"humidity\":\"%.3f\"}", device_id, t, p, h);
+    int n = sprintf(content,"{\"device_id\":\"%s\", \"temperature\":%.2f, \"pressure\":%.2f, \"humidity\":%.2f}", device_id, t, p, h);
 
     // send response message
     otCoapMessageInitResponse(
