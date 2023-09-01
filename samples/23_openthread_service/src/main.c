@@ -57,6 +57,7 @@ static void battery_handler(void *context, otMessage *message, const otMessageIn
 {
     otMessage *responseMessage = otCoapNewMessage(context, NULL);
 
+    battery_start();
     if (otCoapMessageGetCode(message) != OT_COAP_CODE_GET) {
         LOG_ERR("Battery handler - Unexpected CoAP code");
         otCoapMessageInitResponse(responseMessage,
